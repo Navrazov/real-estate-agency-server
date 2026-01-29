@@ -1,0 +1,21 @@
+export interface CreateListingBody {
+  title: string;
+  description: string;
+  price: number;
+  address: string;
+  images?: string[];
+}
+
+export interface UpdateListingBody extends Partial<CreateListingBody> {}
+
+export interface ListingResponse {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  address: string;
+  authorId: string;
+  images: string[];
+  createdAt: string;
+  updatedAt: string;
+}
