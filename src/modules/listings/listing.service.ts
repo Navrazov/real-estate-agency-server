@@ -14,6 +14,8 @@ export const listingService = {
       address: body.address,
       authorId,
       images: body.images ?? [],
+      lat: body.lat,
+      lng: body.lng,
       createdAt: now,
       updatedAt: now,
     };
@@ -25,10 +27,18 @@ export const listingService = {
     return store.listings.get(id);
   },
 
-  findAll(): Listing[] {
-    return Array.from(store.listings.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+  findAll(query?: { minPrice?: number; maxPrice?: number; swLat?: number; swLng?: number; neLat?: number; neLng?: number }): Listing[] {
+    let list = Array.from(store.listings.values());
+    if (query?.minPrice != null) list = list.filter((l) => l.price >= query.minPrice!);
+    if (query?.maxPrice != null) list = list.filter((l) => l.price <= query.maxPrice!);
+    if (query?.swLat != null && query?.swLng != null && query?.neLat != null && query?.neLng != null) {
+      list = list.filter((l) => {
+        const lat = l.lat ?? 0;
+        const lng = l.lng ?? 0;
+        return lat >= query.swLat! && lat <= query.neLat! && lng >= query.swLng! && lng <= query.neLng!;
+      });
+    }
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
   findByAuthor(authorId: string): Listing[] {
@@ -43,6 +53,8 @@ export const listingService = {
     if (body.price !== undefined) listing.price = body.price;
     if (body.address !== undefined) listing.address = body.address;
     if (body.images !== undefined) listing.images = body.images;
+    if (body.lat !== undefined) listing.lat = body.lat;
+    if (body.lng !== undefined) listing.lng = body.lng;
     listing.updatedAt = new Date().toISOString();
     store.listings.set(id, listing);
     return listing;

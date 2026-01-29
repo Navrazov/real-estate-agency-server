@@ -17,6 +17,8 @@ export interface Listing {
   address: string;
   authorId: string;
   images: string[];
+  lat?: number;
+  lng?: number;
   createdAt: string;
   updatedAt: string;
 }

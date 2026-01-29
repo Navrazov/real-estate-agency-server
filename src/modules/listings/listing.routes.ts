@@ -13,6 +13,8 @@ const createValidation = [
   body('address').trim().notEmpty().withMessage('Address required'),
   body('images').optional().isArray(),
   body('images.*').optional().isString(),
+  body('lat').optional().isFloat(),
+  body('lng').optional().isFloat(),
 ];
 
 const updateValidation = [
@@ -22,10 +24,25 @@ const updateValidation = [
   body('address').optional().trim().notEmpty(),
   body('images').optional().isArray(),
   body('images.*').optional().isString(),
+  body('lat').optional().isFloat(),
+  body('lng').optional().isFloat(),
 ];
 
-router.get('/', (_req, res) => {
-  const listings = listingService.findAll();
+router.get('/', (req, res) => {
+  const minPrice = req.query.minPrice != null ? Number(req.query.minPrice) : undefined;
+  const maxPrice = req.query.maxPrice != null ? Number(req.query.maxPrice) : undefined;
+  const swLat = req.query.swLat != null ? Number(req.query.swLat) : undefined;
+  const swLng = req.query.swLng != null ? Number(req.query.swLng) : undefined;
+  const neLat = req.query.neLat != null ? Number(req.query.neLat) : undefined;
+  const neLng = req.query.neLng != null ? Number(req.query.neLng) : undefined;
+  const listings = listingService.findAll({
+    minPrice: Number.isFinite(minPrice) ? minPrice : undefined,
+    maxPrice: Number.isFinite(maxPrice) ? maxPrice : undefined,
+    swLat: Number.isFinite(swLat) ? swLat : undefined,
+    swLng: Number.isFinite(swLng) ? swLng : undefined,
+    neLat: Number.isFinite(neLat) ? neLat : undefined,
+    neLng: Number.isFinite(neLng) ? neLng : undefined,
+  });
   res.json(listings);
 });
 
