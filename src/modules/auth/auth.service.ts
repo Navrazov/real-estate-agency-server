@@ -30,9 +30,11 @@ export const authService = {
     const user: User = {
       id,
       email: body.email,
+      name: body.name,
       passwordHash,
       role,
       blocked: false,
+      favorites: [],
       createdAt: new Date().toISOString(),
     };
     store.users.set(id, user);
@@ -40,7 +42,7 @@ export const authService = {
     const token = createToken(user);
     return {
       token,
-      user: { id: user.id, email: user.email, role: user.role },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role },
     };
   },
 
@@ -55,7 +57,7 @@ export const authService = {
     const token = createToken(user);
     return {
       token,
-      user: { id: user.id, email: user.email, role: user.role },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role },
     };
   },
 };
