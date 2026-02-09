@@ -10,6 +10,9 @@ function toResponse(listing: Listing, userId?: string): ListingResponse {
     title: listing.title,
     description: listing.description,
     price: listing.price,
+    paymentType: listing.paymentType,
+    installmentMonths: listing.installmentMonths,
+    installmentMonthly: listing.installmentMonthly,
     address: listing.address,
     propertyType: listing.propertyType,
     rooms: listing.rooms,
@@ -18,6 +21,7 @@ function toResponse(listing: Listing, userId?: string): ListingResponse {
     totalFloors: listing.totalFloors,
     authorId: listing.authorId,
     authorName: listing.authorName ?? user?.name ?? user?.email?.split('@')[0],
+    authorPhone: listing.authorPhone ?? user?.phone,
     images: listing.images,
     lat: listing.lat,
     lng: listing.lng,
@@ -38,6 +42,9 @@ export const listingService = {
       title: body.title,
       description: body.description,
       price: body.price,
+      paymentType: body.paymentType ?? 'cash',
+      installmentMonths: body.paymentType === 'installment' ? body.installmentMonths : undefined,
+      installmentMonthly: body.paymentType === 'installment' ? body.installmentMonthly : undefined,
       address: body.address,
       propertyType: body.propertyType ?? 'apartment',
       rooms: body.rooms,
@@ -146,6 +153,19 @@ export const listingService = {
     if (body.title !== undefined) listing.title = body.title;
     if (body.description !== undefined) listing.description = body.description;
     if (body.price !== undefined) listing.price = body.price;
+    if (body.paymentType !== undefined) {
+      listing.paymentType = body.paymentType;
+      if (body.paymentType === 'installment') {
+        if (body.installmentMonths !== undefined) listing.installmentMonths = body.installmentMonths;
+        if (body.installmentMonthly !== undefined) listing.installmentMonthly = body.installmentMonthly;
+      } else {
+        listing.installmentMonths = undefined;
+        listing.installmentMonthly = undefined;
+      }
+    } else {
+      if (body.installmentMonths !== undefined) listing.installmentMonths = body.installmentMonths;
+      if (body.installmentMonthly !== undefined) listing.installmentMonthly = body.installmentMonthly;
+    }
     if (body.address !== undefined) listing.address = body.address;
     if (body.propertyType !== undefined) listing.propertyType = body.propertyType;
     if (body.rooms !== undefined) listing.rooms = body.rooms;

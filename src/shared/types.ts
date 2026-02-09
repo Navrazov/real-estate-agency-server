@@ -15,12 +15,16 @@ export interface User {
 
 export type PropertyType = 'apartment' | 'house' | 'room' | 'land' | 'commercial';
 export type ListingStatus = 'active' | 'sold' | 'rented';
+export type PaymentType = 'cash' | 'installment';
 
 export interface Listing {
   id: string;
   title: string;
   description: string;
   price: number;
+  paymentType: PaymentType;
+  installmentMonths?: number;
+  installmentMonthly?: number;
   address: string;
   propertyType: PropertyType;
   rooms?: number;

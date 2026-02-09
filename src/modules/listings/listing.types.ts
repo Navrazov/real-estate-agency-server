@@ -1,9 +1,12 @@
-import type { PropertyType, ListingStatus } from '../../shared/types.js';
+import type { PropertyType, ListingStatus, PaymentType } from '../../shared/types.js';
 
 export interface CreateListingBody {
   title: string;
   description: string;
   price: number;
+  paymentType?: PaymentType;
+  installmentMonths?: number;
+  installmentMonthly?: number;
   address: string;
   propertyType?: PropertyType;
   rooms?: number;
@@ -52,6 +55,9 @@ export interface ListingResponse {
   title: string;
   description: string;
   price: number;
+  paymentType: PaymentType;
+  installmentMonths?: number;
+  installmentMonthly?: number;
   address: string;
   propertyType: PropertyType;
   rooms?: number;
@@ -60,6 +66,7 @@ export interface ListingResponse {
   totalFloors?: number;
   authorId: string;
   authorName?: string;
+  authorPhone?: string;
   images: string[];
   lat?: number;
   lng?: number;
