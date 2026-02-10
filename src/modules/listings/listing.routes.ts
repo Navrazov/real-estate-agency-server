@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, param, query, validationResult } from 'express-validator';
+import { body, param, validationResult } from 'express-validator';
 import { authMiddleware, adminOnly, AuthRequest } from '../../middlewares/auth.middleware.js';
 import { checkNotBlocked } from '../../middlewares/blocked.middleware.js';
 import { listingService } from './listing.service.js';
@@ -59,54 +59,70 @@ function parseNum(val: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-router.get('/', optionalAuth, (req: AuthRequest, res) => {
-  const q: ListingsQuery = {
-    search: typeof req.query.search === 'string' ? req.query.search : undefined,
-    propertyType: PROPERTY_TYPES.includes(req.query.propertyType as string)
-      ? (req.query.propertyType as PropertyType)
-      : undefined,
-    status: LISTING_STATUSES.includes(req.query.status as string)
-      ? (req.query.status as ListingStatus)
-      : undefined,
-    minPrice: parseNum(req.query.minPrice),
-    maxPrice: parseNum(req.query.maxPrice),
-    minRooms: parseNum(req.query.minRooms),
-    maxRooms: parseNum(req.query.maxRooms),
-    minArea: parseNum(req.query.minArea),
-    maxArea: parseNum(req.query.maxArea),
-    swLat: parseNum(req.query.swLat),
-    swLng: parseNum(req.query.swLng),
-    neLat: parseNum(req.query.neLat),
-    neLng: parseNum(req.query.neLng),
-    sortBy: ['price', 'date', 'views'].includes(req.query.sortBy as string)
-      ? (req.query.sortBy as 'price' | 'date' | 'views')
-      : undefined,
-    sortOrder: ['asc', 'desc'].includes(req.query.sortOrder as string)
-      ? (req.query.sortOrder as 'asc' | 'desc')
-      : undefined,
-    page: parseNum(req.query.page),
-    limit: parseNum(req.query.limit),
-  };
-  const result = listingService.findAll(q, req.user?.userId);
-  res.json(result);
+router.get('/', optionalAuth, async (req: AuthRequest, res, next) => {
+  try {
+    const q: ListingsQuery = {
+      search: typeof req.query.search === 'string' ? req.query.search : undefined,
+      propertyType: PROPERTY_TYPES.includes(req.query.propertyType as string)
+        ? (req.query.propertyType as PropertyType)
+        : undefined,
+      status: LISTING_STATUSES.includes(req.query.status as string)
+        ? (req.query.status as ListingStatus)
+        : undefined,
+      minPrice: parseNum(req.query.minPrice),
+      maxPrice: parseNum(req.query.maxPrice),
+      minRooms: parseNum(req.query.minRooms),
+      maxRooms: parseNum(req.query.maxRooms),
+      minArea: parseNum(req.query.minArea),
+      maxArea: parseNum(req.query.maxArea),
+      swLat: parseNum(req.query.swLat),
+      swLng: parseNum(req.query.swLng),
+      neLat: parseNum(req.query.neLat),
+      neLng: parseNum(req.query.neLng),
+      sortBy: ['price', 'date', 'views'].includes(req.query.sortBy as string)
+        ? (req.query.sortBy as 'price' | 'date' | 'views')
+        : undefined,
+      sortOrder: ['asc', 'desc'].includes(req.query.sortOrder as string)
+        ? (req.query.sortOrder as 'asc' | 'desc')
+        : undefined,
+      page: parseNum(req.query.page),
+      limit: parseNum(req.query.limit),
+    };
+    const result = await listingService.findAll(q, req.user?.userId);
+    res.json(result);
+  } catch (e) {
+    next(e);
+  }
 });
 
-router.get('/stats', adminOnly, (_req, res) => {
-  const stats = listingService.getStats();
-  res.json(stats);
+router.get('/stats', adminOnly, async (_req, res, next) => {
+  try {
+    const stats = await listingService.getStats();
+    res.json(stats);
+  } catch (e) {
+    next(e);
+  }
 });
 
-router.get('/my', authMiddleware, checkNotBlocked, (req: AuthRequest, res) => {
-  const listings = listingService.findByAuthor(req.user!.userId, req.user!.userId);
-  res.json(listings);
+router.get('/my', authMiddleware, checkNotBlocked, async (req: AuthRequest, res, next) => {
+  try {
+    const listings = await listingService.findByAuthor(req.user!.userId, req.user!.userId);
+    res.json(listings);
+  } catch (e) {
+    next(e);
+  }
 });
 
-router.get('/:id', optionalAuth, param('id').notEmpty(), (req: AuthRequest, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-  const listing = listingService.findById(req.params.id, req.user?.userId, true);
-  if (!listing) return res.status(404).json({ error: 'Listing not found' });
-  res.json(listing);
+router.get('/:id', optionalAuth, param('id').notEmpty(), async (req: AuthRequest, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const listing = await listingService.findById(req.params.id, req.user?.userId, true);
+    if (!listing) return res.status(404).json({ error: 'Listing not found' });
+    res.json(listing);
+  } catch (e) {
+    next(e);
+  }
 });
 
 router.post(
@@ -114,12 +130,12 @@ router.post(
   authMiddleware,
   checkNotBlocked,
   createValidation,
-  async (req: AuthRequest, res, next) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-      const user = userService.findById(req.user!.userId);
-      const listing = listingService.create(
+      const user = await userService.findById(req.user!.userId);
+      const listing = await listingService.create(
         req.user!.userId,
         req.body,
         user?.name ?? user?.email?.split('@')[0],
@@ -138,12 +154,12 @@ router.patch(
   checkNotBlocked,
   param('id').notEmpty(),
   updateValidation,
-  async (req: AuthRequest, res, next) => {
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
       const isAdmin = req.user!.role === 'admin';
-      const listing = listingService.update(req.params.id, req.user!.userId, req.body, isAdmin);
+      const listing = await listingService.update(req.params.id, req.user!.userId, req.body, isAdmin);
       if (!listing) return res.status(404).json({ error: 'Not found or not owner' });
       res.json(listing);
     } catch (e) {
@@ -160,7 +176,7 @@ router.delete(
   async (req: AuthRequest, res, next) => {
     try {
       const isAdmin = req.user!.role === 'admin';
-      const ok = listingService.delete(req.params.id, req.user!.userId, isAdmin);
+      const ok = await listingService.delete(req.params.id, req.user!.userId, isAdmin);
       if (!ok) return res.status(404).json({ error: 'Not found or not owner' });
       res.status(204).send();
     } catch (e) {

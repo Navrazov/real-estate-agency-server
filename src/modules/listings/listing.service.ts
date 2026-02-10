@@ -1,12 +1,15 @@
-import { store } from '../../shared/store.js';
-import { Listing, User } from '../../shared/types.js';
+import { ListingModel } from '../../models/Listing.js';
+import { UserModel } from '../../models/User.js';
 import type { CreateListingBody, UpdateListingBody, ListingsQuery, ListingsResponse, ListingResponse } from './listing.types.js';
+import type { FilterQuery, SortOrder } from 'mongoose';
+import type { IListing } from '../../models/Listing.js';
 
-function toResponse(listing: Listing, userId?: string): ListingResponse {
-  const user = store.users.get(listing.authorId);
-  const favorites = userId ? store.users.get(userId)?.favorites ?? [] : [];
+async function toResponse(listing: IListing, userId?: string): Promise<ListingResponse> {
+  const user = await UserModel.findById(listing.authorId).lean();
+  const favUser = userId ? await UserModel.findById(userId).lean() : null;
+  const favorites = favUser?.favorites ?? [];
   return {
-    id: listing.id,
+    id: listing._id.toString(),
     title: listing.title,
     description: listing.description,
     price: listing.price,
@@ -27,18 +30,15 @@ function toResponse(listing: Listing, userId?: string): ListingResponse {
     lng: listing.lng,
     status: listing.status,
     views: listing.views,
-    isFavorite: favorites.includes(listing.id),
-    createdAt: listing.createdAt,
-    updatedAt: listing.updatedAt,
+    isFavorite: favorites.includes(listing._id.toString()),
+    createdAt: listing.createdAt.toISOString(),
+    updatedAt: listing.updatedAt.toISOString(),
   };
 }
 
 export const listingService = {
-  create(authorId: string, body: CreateListingBody, authorName?: string, authorPhone?: string): Listing {
-    const id = `listing_${store.nextListingId++}`;
-    const now = new Date().toISOString();
-    const listing: Listing = {
-      id,
+  async create(authorId: string, body: CreateListingBody, authorName?: string, authorPhone?: string): Promise<ListingResponse> {
+    const listing = await ListingModel.create({
       title: body.title,
       description: body.description,
       price: body.price,
@@ -57,99 +57,93 @@ export const listingService = {
       images: body.images ?? [],
       lat: body.lat,
       lng: body.lng,
-      status: 'active',
-      views: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
-    store.listings.set(id, listing);
-    return listing;
+    });
+    return toResponse(listing, authorId);
   },
 
-  findById(id: string, userId?: string, incrementViews = false): ListingResponse | undefined {
-    const listing = store.listings.get(id);
+  async findById(id: string, userId?: string, incrementViews = false): Promise<ListingResponse | undefined> {
+    const listing = await ListingModel.findById(id);
     if (!listing) return undefined;
     if (incrementViews) {
       listing.views++;
-      store.listings.set(id, listing);
+      await listing.save();
     }
     return toResponse(listing, userId);
   },
 
-  findAll(query: ListingsQuery = {}, userId?: string): ListingsResponse {
-    let list = Array.from(store.listings.values());
+  async findAll(query: ListingsQuery = {}, userId?: string): Promise<ListingsResponse> {
+    const filter: FilterQuery<IListing> = {};
 
-    // Search
     if (query.search) {
-      const s = query.search.toLowerCase();
-      list = list.filter(
-        (l) =>
-          l.title.toLowerCase().includes(s) ||
-          l.description.toLowerCase().includes(s) ||
-          l.address.toLowerCase().includes(s)
-      );
+      const regex = new RegExp(query.search, 'i');
+      filter.$or = [
+        { title: regex },
+        { description: regex },
+        { address: regex },
+      ];
     }
 
-    // Property type
-    if (query.propertyType) list = list.filter((l) => l.propertyType === query.propertyType);
+    if (query.propertyType) filter.propertyType = query.propertyType;
+    if (query.status) filter.status = query.status;
+    else filter.status = 'active';
 
-    // Status
-    if (query.status) list = list.filter((l) => l.status === query.status);
-    else list = list.filter((l) => l.status === 'active');
+    if (query.minPrice != null || query.maxPrice != null) {
+      filter.price = {};
+      if (query.minPrice != null) filter.price.$gte = query.minPrice;
+      if (query.maxPrice != null) filter.price.$lte = query.maxPrice;
+    }
 
-    // Price
-    if (query.minPrice != null) list = list.filter((l) => l.price >= query.minPrice!);
-    if (query.maxPrice != null) list = list.filter((l) => l.price <= query.maxPrice!);
+    if (query.minRooms != null || query.maxRooms != null) {
+      filter.rooms = {};
+      if (query.minRooms != null) filter.rooms.$gte = query.minRooms;
+      if (query.maxRooms != null) filter.rooms.$lte = query.maxRooms;
+    }
 
-    // Rooms
-    if (query.minRooms != null) list = list.filter((l) => (l.rooms ?? 0) >= query.minRooms!);
-    if (query.maxRooms != null) list = list.filter((l) => (l.rooms ?? 0) <= query.maxRooms!);
+    if (query.minArea != null || query.maxArea != null) {
+      filter.area = {};
+      if (query.minArea != null) filter.area.$gte = query.minArea;
+      if (query.maxArea != null) filter.area.$lte = query.maxArea;
+    }
 
-    // Area
-    if (query.minArea != null) list = list.filter((l) => (l.area ?? 0) >= query.minArea!);
-    if (query.maxArea != null) list = list.filter((l) => (l.area ?? 0) <= query.maxArea!);
-
-    // Bounds
     if (query.swLat != null && query.swLng != null && query.neLat != null && query.neLng != null) {
-      list = list.filter((l) => {
-        if (l.lat == null || l.lng == null) return false;
-        return l.lat >= query.swLat! && l.lat <= query.neLat! && l.lng >= query.swLng! && l.lng <= query.neLng!;
-      });
+      filter.lat = { $gte: query.swLat, $lte: query.neLat };
+      filter.lng = { $gte: query.swLng, $lte: query.neLng };
     }
 
-    // Sorting
     const sortBy = query.sortBy ?? 'date';
     const sortOrder = query.sortOrder ?? 'desc';
-    list.sort((a, b) => {
-      let cmp = 0;
-      if (sortBy === 'price') cmp = a.price - b.price;
-      else if (sortBy === 'views') cmp = a.views - b.views;
-      else cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      return sortOrder === 'desc' ? -cmp : cmp;
-    });
+    const dir: SortOrder = sortOrder === 'desc' ? -1 : 1;
+    let sort: Record<string, SortOrder> = {};
+    if (sortBy === 'price') sort = { price: dir };
+    else if (sortBy === 'views') sort = { views: dir };
+    else sort = { createdAt: dir };
 
-    // Pagination
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 20));
-    const total = list.length;
+    const total = await ListingModel.countDocuments(filter);
     const totalPages = Math.ceil(total / limit);
     const offset = (page - 1) * limit;
-    const items = list.slice(offset, offset + limit).map((l) => toResponse(l, userId));
+
+    const listings = await ListingModel.find(filter).sort(sort).skip(offset).limit(limit).lean();
+    const items = await Promise.all(
+      listings.map((l) => toResponse(l as unknown as IListing, userId))
+    );
 
     return { items, total, page, limit, totalPages };
   },
 
-  findByAuthor(authorId: string, userId?: string): ListingResponse[] {
-    return Array.from(store.listings.values())
-      .filter((l) => l.authorId === authorId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .map((l) => toResponse(l, userId));
+  async findByAuthor(authorId: string, userId?: string): Promise<ListingResponse[]> {
+    const listings = await ListingModel.find({ authorId }).sort({ createdAt: -1 }).lean();
+    return Promise.all(
+      listings.map((l) => toResponse(l as unknown as IListing, userId))
+    );
   },
 
-  update(id: string, authorId: string, body: UpdateListingBody, isAdmin?: boolean): Listing | null {
-    const listing = store.listings.get(id);
+  async update(id: string, authorId: string, body: UpdateListingBody, isAdmin?: boolean): Promise<ListingResponse | null> {
+    const listing = await ListingModel.findById(id);
     if (!listing) return null;
     if (listing.authorId !== authorId && !isAdmin) return null;
+
     if (body.title !== undefined) listing.title = body.title;
     if (body.description !== undefined) listing.description = body.description;
     if (body.price !== undefined) listing.price = body.price;
@@ -176,29 +170,29 @@ export const listingService = {
     if (body.lat !== undefined) listing.lat = body.lat;
     if (body.lng !== undefined) listing.lng = body.lng;
     if (body.status !== undefined) listing.status = body.status;
-    listing.updatedAt = new Date().toISOString();
-    store.listings.set(id, listing);
-    return listing;
+
+    await listing.save();
+    return toResponse(listing, authorId);
   },
 
-  delete(id: string, authorId: string, isAdmin?: boolean): boolean {
-    const listing = store.listings.get(id);
+  async delete(id: string, authorId: string, isAdmin?: boolean): Promise<boolean> {
+    const listing = await ListingModel.findById(id);
     if (!listing) return false;
     if (listing.authorId !== authorId && !isAdmin) return false;
-    store.listings.delete(id);
+    await ListingModel.findByIdAndDelete(id);
     return true;
   },
 
-  getStats() {
-    const listings = Array.from(store.listings.values());
-    const active = listings.filter((l) => l.status === 'active').length;
-    const sold = listings.filter((l) => l.status === 'sold').length;
-    const rented = listings.filter((l) => l.status === 'rented').length;
-    const totalViews = listings.reduce((sum, l) => sum + l.views, 0);
+  async getStats() {
+    const total = await ListingModel.countDocuments();
+    const active = await ListingModel.countDocuments({ status: 'active' });
+    const sold = await ListingModel.countDocuments({ status: 'sold' });
+    const rented = await ListingModel.countDocuments({ status: 'rented' });
+    const viewsAgg = await ListingModel.aggregate([{ $group: { _id: null, totalViews: { $sum: '$views' } } }]);
+    const totalViews = viewsAgg[0]?.totalViews ?? 0;
+    const typeAgg = await ListingModel.aggregate([{ $group: { _id: '$propertyType', count: { $sum: 1 } } }]);
     const byType: Record<string, number> = {};
-    listings.forEach((l) => {
-      byType[l.propertyType] = (byType[l.propertyType] ?? 0) + 1;
-    });
-    return { total: listings.length, active, sold, rented, totalViews, byType };
+    typeAgg.forEach((t) => { byType[t._id] = t.count; });
+    return { total, active, sold, rented, totalViews, byType };
   },
 };

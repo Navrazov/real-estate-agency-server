@@ -1,5 +1,4 @@
-import { store } from '../../shared/store.js';
-import { User } from '../../shared/types.js';
+import { UserModel, IUser } from '../../models/User.js';
 import { listingService } from '../listings/listing.service.js';
 
 export interface UpdateProfileBody {
@@ -9,34 +8,28 @@ export interface UpdateProfileBody {
 }
 
 export const userService = {
-  findById(id: string): User | undefined {
-    return store.users.get(id);
+  async findById(id: string): Promise<IUser | null> {
+    return UserModel.findById(id);
   },
 
-  findAll(): User[] {
-    return Array.from(store.users.values());
+  async findAll(): Promise<IUser[]> {
+    return UserModel.find();
   },
 
-  updateProfile(userId: string, body: UpdateProfileBody): User | null {
-    const user = store.users.get(userId);
-    if (!user) return null;
-    if (body.name !== undefined) user.name = body.name;
-    if (body.phone !== undefined) user.phone = body.phone;
-    if (body.avatar !== undefined) user.avatar = body.avatar;
-    store.users.set(userId, user);
-    return user;
+  async updateProfile(userId: string, body: UpdateProfileBody): Promise<IUser | null> {
+    const update: Record<string, unknown> = {};
+    if (body.name !== undefined) update.name = body.name;
+    if (body.phone !== undefined) update.phone = body.phone;
+    if (body.avatar !== undefined) update.avatar = body.avatar;
+    return UserModel.findByIdAndUpdate(userId, update, { new: true });
   },
 
-  async setBlocked(userId: string, blocked: boolean): Promise<User | null> {
-    const user = store.users.get(userId);
-    if (!user) return null;
-    user.blocked = blocked;
-    store.users.set(userId, user);
-    return user;
+  async setBlocked(userId: string, blocked: boolean): Promise<IUser | null> {
+    return UserModel.findByIdAndUpdate(userId, { blocked }, { new: true });
   },
 
-  toggleFavorite(userId: string, listingId: string): { favorites: string[]; isFavorite: boolean } | null {
-    const user = store.users.get(userId);
+  async toggleFavorite(userId: string, listingId: string): Promise<{ favorites: string[]; isFavorite: boolean } | null> {
+    const user = await UserModel.findById(userId);
     if (!user) return null;
     if (!user.favorites) user.favorites = [];
     const idx = user.favorites.indexOf(listingId);
@@ -46,29 +39,26 @@ export const userService = {
     } else {
       user.favorites.splice(idx, 1);
     }
-    store.users.set(userId, user);
+    await user.save();
     return { favorites: user.favorites, isFavorite };
   },
 
-  getFavorites(userId: string) {
-    const user = store.users.get(userId);
+  async getFavorites(userId: string) {
+    const user = await UserModel.findById(userId);
     if (!user) return [];
     const favorites = user.favorites ?? [];
-    return favorites
-      .map((id) => listingService.findById(id, userId))
-      .filter(Boolean);
+    const results = await Promise.all(
+      favorites.map((id) => listingService.findById(id, userId))
+    );
+    return results.filter(Boolean);
   },
 
-  getStats() {
-    const users = Array.from(store.users.values());
-    const total = users.length;
-    const blocked = users.filter((u) => u.blocked).length;
-    const admins = users.filter((u) => u.role === 'admin').length;
-    const recent = users.filter((u) => {
-      const d = new Date(u.createdAt);
-      const now = new Date();
-      return now.getTime() - d.getTime() < 7 * 24 * 60 * 60 * 1000;
-    }).length;
+  async getStats() {
+    const total = await UserModel.countDocuments();
+    const blocked = await UserModel.countDocuments({ blocked: true });
+    const admins = await UserModel.countDocuments({ role: 'admin' });
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const recent = await UserModel.countDocuments({ createdAt: { $gte: weekAgo } });
     return { total, blocked, admins, recentWeek: recent };
   },
 };
