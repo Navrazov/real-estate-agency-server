@@ -5,7 +5,6 @@ export interface LoginBody {
 
 export interface RegisterBody extends LoginBody {
   name?: string;
-  role?: string;
 }
 
 export interface AuthResponse {
@@ -15,5 +14,6 @@ export interface AuthResponse {
     email: string;
     name?: string;
     role: string;
+    emailVerified: boolean;
   };
 }

@@ -10,7 +10,7 @@ import type { PropertyType, ListingStatus } from '../../shared/types.js';
 const router = Router();
 
 const PROPERTY_TYPES = ['apartment', 'house', 'room', 'land', 'commercial'];
-const LISTING_STATUSES = ['active', 'sold', 'rented'];
+const LISTING_STATUSES = ['pending', 'active', 'sold', 'rented'];
 
 const createValidation = [
   body('title').trim().notEmpty().withMessage('Title required'),
@@ -95,10 +95,33 @@ router.get('/', optionalAuth, async (req: AuthRequest, res, next) => {
   }
 });
 
-router.get('/stats', adminOnly, async (_req, res, next) => {
+router.get('/stats', authMiddleware, adminOnly, async (_req, res, next) => {
   try {
     const stats = await listingService.getStats();
     res.json(stats);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/moderation', authMiddleware, adminOnly, async (_req, res, next) => {
+  try {
+    const listings = await listingService.findPendingModeration();
+    res.json(listings);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.patch('/:id/moderate', authMiddleware, adminOnly, async (req: AuthRequest, res, next) => {
+  try {
+    const { action, note } = req.body;
+    if (!action || !['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ error: 'Action must be "approve" or "reject"' });
+    }
+    const listing = await listingService.moderate(req.params.id, req.user!.userId, action, note);
+    if (!listing) return res.status(404).json({ error: 'Listing not found' });
+    res.json(listing);
   } catch (e) {
     next(e);
   }

@@ -28,6 +28,10 @@ export const userService = {
     return UserModel.findByIdAndUpdate(userId, { blocked }, { new: true });
   },
 
+  async setRole(userId: string, role: string): Promise<IUser | null> {
+    return UserModel.findByIdAndUpdate(userId, { role }, { new: true });
+  },
+
   async toggleFavorite(userId: string, listingId: string): Promise<{ favorites: string[]; isFavorite: boolean } | null> {
     const user = await UserModel.findById(userId);
     if (!user) return null;

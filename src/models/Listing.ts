@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import type { PropertyType, ListingStatus, PaymentType } from '../shared/types.js';
+import type { PropertyType, ListingStatus, PaymentType, ModerationStatus } from '../shared/types.js';
 
 export interface IListing extends Document {
   title: string;
@@ -21,6 +21,10 @@ export interface IListing extends Document {
   lat?: number;
   lng?: number;
   status: ListingStatus;
+  moderationStatus: ModerationStatus;
+  moderationNote?: string;
+  moderatedBy?: string;
+  moderatedAt?: Date;
   views: number;
   createdAt: Date;
   updatedAt: Date;
@@ -50,7 +54,11 @@ const listingSchema = new Schema<IListing>(
     images: { type: [String], default: [] },
     lat: { type: Number },
     lng: { type: Number },
-    status: { type: String, enum: ['active', 'sold', 'rented'], default: 'active' },
+    status: { type: String, enum: ['pending', 'active', 'sold', 'rented'], default: 'pending' },
+    moderationStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+    moderationNote: { type: String },
+    moderatedBy: { type: String },
+    moderatedAt: { type: Date },
     views: { type: Number, default: 0 },
   },
   { timestamps: true }
@@ -58,6 +66,7 @@ const listingSchema = new Schema<IListing>(
 
 listingSchema.index({ price: 1 });
 listingSchema.index({ status: 1 });
+listingSchema.index({ moderationStatus: 1 });
 listingSchema.index({ lat: 1, lng: 1 });
 
 export const ListingModel = mongoose.model<IListing>('Listing', listingSchema);

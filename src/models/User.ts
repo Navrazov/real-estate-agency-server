@@ -10,6 +10,9 @@ export interface IUser extends Document {
   role: Role;
   blocked: boolean;
   favorites: string[];
+  emailVerified: boolean;
+  verificationToken?: string;
+  verificationTokenExpiresAt?: Date;
   createdAt: Date;
 }
 
@@ -23,6 +26,9 @@ const userSchema = new Schema<IUser>(
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     blocked: { type: Boolean, default: false },
     favorites: { type: [String], default: [] },
+    emailVerified: { type: Boolean, default: false },
+    verificationToken: { type: String },
+    verificationTokenExpiresAt: { type: Date },
   },
   { timestamps: true }
 );

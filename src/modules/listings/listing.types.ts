@@ -1,4 +1,4 @@
-import type { PropertyType, ListingStatus, PaymentType } from '../../shared/types.js';
+import type { PropertyType, ListingStatus, PaymentType, ModerationStatus } from '../../shared/types.js';
 
 export interface CreateListingBody {
   title: string;
@@ -71,8 +71,15 @@ export interface ListingResponse {
   lat?: number;
   lng?: number;
   status: ListingStatus;
+  moderationStatus: ModerationStatus;
+  moderationNote?: string;
   views: number;
   isFavorite?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ModerationAction {
+  action: 'approve' | 'reject';
+  note?: string;
 }

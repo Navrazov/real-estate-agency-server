@@ -29,6 +29,8 @@ async function toResponse(listing: IListing, userId?: string): Promise<ListingRe
     lat: listing.lat,
     lng: listing.lng,
     status: listing.status,
+    moderationStatus: listing.moderationStatus,
+    moderationNote: listing.moderationNote,
     views: listing.views,
     isFavorite: favorites.includes(listing._id.toString()),
     createdAt: listing.createdAt.toISOString(),
@@ -57,6 +59,8 @@ export const listingService = {
       images: body.images ?? [],
       lat: body.lat,
       lng: body.lng,
+      status: 'pending',
+      moderationStatus: 'pending',
     });
     return toResponse(listing, authorId);
   },
@@ -86,6 +90,9 @@ export const listingService = {
     if (query.propertyType) filter.propertyType = query.propertyType;
     if (query.status) filter.status = query.status;
     else filter.status = 'active';
+
+    // Public queries only show approved listings
+    filter.moderationStatus = 'approved';
 
     if (query.minPrice != null || query.maxPrice != null) {
       filter.price = {};
@@ -139,6 +146,30 @@ export const listingService = {
     );
   },
 
+  async findPendingModeration(): Promise<ListingResponse[]> {
+    const listings = await ListingModel.find({ moderationStatus: 'pending' }).sort({ createdAt: 1 }).lean();
+    return Promise.all(
+      listings.map((l) => toResponse(l as unknown as IListing))
+    );
+  },
+
+  async moderate(id: string, adminId: string, action: 'approve' | 'reject', note?: string): Promise<ListingResponse | null> {
+    const listing = await ListingModel.findById(id);
+    if (!listing) return null;
+
+    listing.moderationStatus = action === 'approve' ? 'approved' : 'rejected';
+    listing.moderationNote = note;
+    listing.moderatedBy = adminId;
+    listing.moderatedAt = new Date();
+
+    if (action === 'approve') {
+      listing.status = 'active';
+    }
+
+    await listing.save();
+    return toResponse(listing);
+  },
+
   async update(id: string, authorId: string, body: UpdateListingBody, isAdmin?: boolean): Promise<ListingResponse | null> {
     const listing = await ListingModel.findById(id);
     if (!listing) return null;
@@ -188,11 +219,12 @@ export const listingService = {
     const active = await ListingModel.countDocuments({ status: 'active' });
     const sold = await ListingModel.countDocuments({ status: 'sold' });
     const rented = await ListingModel.countDocuments({ status: 'rented' });
+    const pending = await ListingModel.countDocuments({ moderationStatus: 'pending' });
     const viewsAgg = await ListingModel.aggregate([{ $group: { _id: null, totalViews: { $sum: '$views' } } }]);
     const totalViews = viewsAgg[0]?.totalViews ?? 0;
     const typeAgg = await ListingModel.aggregate([{ $group: { _id: '$propertyType', count: { $sum: 1 } } }]);
     const byType: Record<string, number> = {};
     typeAgg.forEach((t) => { byType[t._id] = t.count; });
-    return { total, active, sold, rented, totalViews, byType };
+    return { total, active, sold, rented, pending, totalViews, byType };
   },
 };

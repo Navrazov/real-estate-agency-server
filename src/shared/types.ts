@@ -14,8 +14,9 @@ export interface User {
 }
 
 export type PropertyType = 'apartment' | 'house' | 'room' | 'land' | 'commercial';
-export type ListingStatus = 'active' | 'sold' | 'rented';
+export type ListingStatus = 'pending' | 'active' | 'sold' | 'rented';
 export type PaymentType = 'cash' | 'installment';
+export type ModerationStatus = 'pending' | 'approved' | 'rejected';
 
 export interface Listing {
   id: string;
@@ -38,6 +39,10 @@ export interface Listing {
   lat?: number;
   lng?: number;
   status: ListingStatus;
+  moderationStatus: ModerationStatus;
+  moderationNote?: string;
+  moderatedBy?: string;
+  moderatedAt?: string;
   views: number;
   createdAt: string;
   updatedAt: string;

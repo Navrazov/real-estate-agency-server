@@ -65,7 +65,7 @@ router.post('/favorites/:listingId', param('listingId').notEmpty(), async (req: 
   }
 });
 
-router.get('/', adminOnly, async (_req, res, next) => {
+router.get('/', authMiddleware, adminOnly, async (_req, res, next) => {
   try {
     const users = (await userService.findAll()).map((u) => ({
       id: u._id.toString(),
@@ -81,7 +81,7 @@ router.get('/', adminOnly, async (_req, res, next) => {
   }
 });
 
-router.get('/stats', adminOnly, async (_req, res, next) => {
+router.get('/stats', authMiddleware, adminOnly, async (_req, res, next) => {
   try {
     const stats = await userService.getStats();
     res.json(stats);
@@ -90,7 +90,22 @@ router.get('/stats', adminOnly, async (_req, res, next) => {
   }
 });
 
-router.patch('/:id/block', adminOnly, async (req, res, next) => {
+router.patch('/:id/role', authMiddleware, adminOnly, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+    if (!role || !['user', 'admin'].includes(role)) {
+      return res.status(400).json({ error: 'Role must be "user" or "admin"' });
+    }
+    const user = await userService.setRole(id, role);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ id: user._id.toString(), role: user.role });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.patch('/:id/block', authMiddleware, adminOnly, async (req, res, next) => {
   try {
     const { id } = req.params;
     const blocked = req.body.blocked === true;
