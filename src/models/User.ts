@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 import type { Role } from '../config/constants.js';
 
 export interface IUser extends Document {
-  email: string;
+  email?: string;
   name?: string;
   phone?: string;
   avatar?: string;
@@ -11,6 +11,9 @@ export interface IUser extends Document {
   blocked: boolean;
   favorites: string[];
   emailVerified: boolean;
+  phoneVerified: boolean;
+  phoneCode?: string;
+  phoneCodeExpiresAt?: Date;
   verificationToken?: string;
   verificationTokenExpiresAt?: Date;
   lastSeen?: Date;
@@ -19,15 +22,18 @@ export interface IUser extends Document {
 
 const userSchema = new Schema<IUser>(
   {
-    email: { type: String, required: true, unique: true, lowercase: true },
+    email: { type: String, unique: true, sparse: true, lowercase: true },
     name: { type: String },
-    phone: { type: String },
+    phone: { type: String, unique: true, sparse: true },
     avatar: { type: String },
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     blocked: { type: Boolean, default: false },
     favorites: { type: [String], default: [] },
     emailVerified: { type: Boolean, default: false },
+    phoneVerified: { type: Boolean, default: false },
+    phoneCode: { type: String },
+    phoneCodeExpiresAt: { type: Date },
     verificationToken: { type: String },
     verificationTokenExpiresAt: { type: Date },
     lastSeen: { type: Date },

@@ -6,13 +6,58 @@ import { authLimiter } from '../../middlewares/rate-limit.middleware.js';
 const router = Router();
 
 const loginValidation = [
-  body('email').isEmail().normalizeEmail(),
   body('password').notEmpty().withMessage('Password required'),
+  // At least one of email or phone must be provided - validated in custom check
+  body().custom((_, { req }) => {
+    const { email, phone } = req.body ?? {};
+    if (!email && !phone) {
+      throw new Error('Either email or phone is required');
+    }
+    return true;
+  }),
+  body('email').optional().isEmail().normalizeEmail(),
+  body('phone').optional().isString().trim(),
 ];
 
 const registerValidation = [
-  ...loginValidation,
+  body('phone')
+    .notEmpty().withMessage('Phone is required')
+    .isString()
+    .trim()
+    .matches(/^\+?\d{7,15}$/).withMessage('Invalid phone format'),
+  body('password').notEmpty().withMessage('Password required'),
+  body('firstName').notEmpty().withMessage('First name is required').isString().trim(),
+  body('lastName').notEmpty().withMessage('Last name is required').isString().trim(),
+  body('code').notEmpty().withMessage('Verification code is required').isString().trim(),
+  body('email').optional().isEmail().normalizeEmail(),
+  body('avatar').optional().isString().trim(),
 ];
+
+const sendCodeValidation = [
+  body('phone')
+    .notEmpty().withMessage('Phone is required')
+    .isString()
+    .trim()
+    .matches(/^\+?\d{7,15}$/).withMessage('Invalid phone format'),
+];
+
+router.post(
+  '/send-code',
+  authLimiter,
+  sendCodeValidation,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+      const result = await authService.sendCode(req.body);
+      res.json(result);
+    } catch (e) {
+      next(e);
+    }
+  }
+);
 
 router.post(
   '/register',
