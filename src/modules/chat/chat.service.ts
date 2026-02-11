@@ -66,13 +66,19 @@ class ChatService {
         read: false,
       });
 
+      // Get the last visible message for this user (respects deletedFor)
+      const lastVisibleMsg = await MessageModel.findOne({
+        conversationId: conv.id,
+        deletedFor: { $ne: userId },
+      }).sort({ createdAt: -1 });
+
       result.push({
         id: conv.id,
         participants: conv.participants,
         listingId: conv.listingId,
         listingTitle,
-        lastMessage: conv.lastMessage,
-        lastMessageAt: conv.lastMessageAt,
+        lastMessage: lastVisibleMsg?.text || null,
+        lastMessageAt: lastVisibleMsg?.createdAt || conv.lastMessageAt,
         otherUser,
         unreadCount,
         createdAt: conv.createdAt,
@@ -139,10 +145,33 @@ class ChatService {
 
     if (forBoth) {
       await MessageModel.findByIdAndDelete(messageId);
+      // If no messages left at all, delete the conversation
+      const remaining = await MessageModel.countDocuments({ conversationId: conv.id });
+      if (remaining === 0) {
+        await ConversationModel.findByIdAndDelete(conv.id);
+      } else {
+        // Update lastMessage to the most recent remaining message
+        const lastMsg = await MessageModel.findOne({ conversationId: conv.id })
+          .sort({ createdAt: -1 });
+        await ConversationModel.findByIdAndUpdate(conv.id, {
+          lastMessage: lastMsg?.text || null,
+          lastMessageAt: lastMsg?.createdAt || null,
+        });
+      }
     } else {
       await MessageModel.findByIdAndUpdate(messageId, {
         $addToSet: { deletedFor: userId },
       });
+      // If no visible messages left for this user, soft-delete conversation
+      const visibleCount = await MessageModel.countDocuments({
+        conversationId: conv.id,
+        deletedFor: { $ne: userId },
+      });
+      if (visibleCount === 0) {
+        await ConversationModel.findByIdAndUpdate(conv.id, {
+          $addToSet: { deletedFor: userId },
+        });
+      }
     }
     return { success: true };
   }
