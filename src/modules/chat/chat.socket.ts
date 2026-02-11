@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import { env } from '../../config/env.js';
 import { chatService } from './chat.service.js';
 import type { JwtPayload } from '../../middlewares/auth.middleware.js';
+import { setOnline, setOffline } from './online.js';
+import { UserModel } from '../../models/User.js';
 
 export function initChatSocket(io: Server) {
   io.use((socket, next) => {
@@ -20,6 +22,14 @@ export function initChatSocket(io: Server) {
   io.on('connection', (socket) => {
     const userId = socket.data.userId;
     socket.join(userId); // Join personal room
+
+    setOnline(userId);
+    UserModel.findByIdAndUpdate(userId, { lastSeen: new Date() }).catch(() => {});
+
+    socket.on('disconnect', () => {
+      setOffline(userId);
+      UserModel.findByIdAndUpdate(userId, { lastSeen: new Date() }).catch(() => {});
+    });
 
     socket.on('send_message', async (data: { conversationId: string; text: string }) => {
       try {

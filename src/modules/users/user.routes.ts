@@ -6,6 +6,31 @@ import { userService } from './user.service.js';
 
 const router = Router();
 
+// Public profile endpoint — no auth required
+router.get('/profile/:id', async (req, res, next) => {
+  try {
+    const user = await userService.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const { isOnline: checkOnline } = await import('../chat/online.js');
+    const listings = await (await import('../listings/listing.service.js')).listingService.findActiveByAuthor(req.params.id);
+
+    res.json({
+      id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      avatar: user.avatar,
+      createdAt: user.createdAt,
+      lastSeen: user.lastSeen,
+      online: checkOnline(req.params.id),
+      listings,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.use(authMiddleware);
 router.use(checkNotBlocked);
 

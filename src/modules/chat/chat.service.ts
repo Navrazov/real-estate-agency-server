@@ -2,6 +2,7 @@ import { ConversationModel, IConversation } from '../../models/Conversation.js';
 import { MessageModel } from '../../models/Message.js';
 import { UserModel } from '../../models/User.js';
 import { ListingModel } from '../../models/Listing.js';
+import { isOnline } from './online.js';
 
 class ChatService {
   async getOrCreateConversation(userId1: string, userId2: string, listingId?: string) {
@@ -45,11 +46,11 @@ class ChatService {
     const result = [];
     for (const conv of conversations) {
       const otherUserId = conv.participants.find((p: string) => p !== userId);
-      let otherUser: { id: string; name?: string; email: string } | undefined;
+      let otherUser: { id: string; name?: string; email: string; lastSeen?: Date; online: boolean } | undefined;
       if (otherUserId) {
-        const user = await UserModel.findById(otherUserId).select('email name');
+        const user = await UserModel.findById(otherUserId).select('email name lastSeen');
         if (user) {
-          otherUser = { id: user.id, name: user.name, email: user.email };
+          otherUser = { id: user.id, name: user.name, email: user.email, lastSeen: user.lastSeen, online: isOnline(user.id) };
         }
       }
 

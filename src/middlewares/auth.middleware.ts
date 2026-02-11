@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { ROLES, Role } from '../config/constants.js';
+import { UserModel } from '../models/User.js';
 
 export interface JwtPayload {
   userId: string;
@@ -22,6 +23,8 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
   try {
     const payload = jwt.verify(token, env.jwtSecret) as JwtPayload;
     req.user = payload;
+    // Update lastSeen (fire-and-forget)
+    UserModel.findByIdAndUpdate(payload.userId, { lastSeen: new Date() }).catch(() => {});
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });

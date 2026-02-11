@@ -146,6 +146,23 @@ export const listingService = {
     );
   },
 
+  async findActiveByAuthor(authorId: string) {
+    const listings = await ListingModel.find({ authorId, status: 'active' })
+      .sort({ createdAt: -1 })
+      .lean();
+    return listings.map(l => ({
+      id: l._id.toString(),
+      title: l.title,
+      price: l.price,
+      address: l.address,
+      propertyType: l.propertyType,
+      images: l.images,
+      rooms: l.rooms,
+      area: l.area,
+      createdAt: l.createdAt,
+    }));
+  },
+
   async findPendingModeration(): Promise<ListingResponse[]> {
     const listings = await ListingModel.find({ moderationStatus: 'pending' }).sort({ createdAt: 1 }).lean();
     return Promise.all(

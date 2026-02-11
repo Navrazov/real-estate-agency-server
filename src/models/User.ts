@@ -13,6 +13,7 @@ export interface IUser extends Document {
   emailVerified: boolean;
   verificationToken?: string;
   verificationTokenExpiresAt?: Date;
+  lastSeen?: Date;
   createdAt: Date;
 }
 
@@ -29,6 +30,7 @@ const userSchema = new Schema<IUser>(
     emailVerified: { type: Boolean, default: false },
     verificationToken: { type: String },
     verificationTokenExpiresAt: { type: Date },
+    lastSeen: { type: Date },
   },
   { timestamps: true }
 );
