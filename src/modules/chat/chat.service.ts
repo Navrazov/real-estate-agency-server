@@ -1,33 +1,45 @@
 import { ConversationModel, IConversation } from '../../models/Conversation.js';
 import { MessageModel } from '../../models/Message.js';
 import { UserModel } from '../../models/User.js';
+import { ListingModel } from '../../models/Listing.js';
 
 class ChatService {
   async getOrCreateConversation(userId1: string, userId2: string, listingId?: string) {
-    // Check both participant orderings
-    const query: any = {
+    // One conversation per pair of users — listingId is NOT part of lookup
+    const query = {
       $or: [
         { participants: [userId1, userId2] },
         { participants: [userId2, userId1] },
       ],
     };
-    if (listingId) {
-      query.listingId = listingId;
-    }
 
     let conversation = await ConversationModel.findOne(query);
+    const isNew = !conversation;
     if (!conversation) {
       conversation = await ConversationModel.create({
         participants: [userId1, userId2],
         listingId,
       });
+    } else if (conversation.deletedFor?.length) {
+      // Restore conversation for the user who is reopening it
+      conversation.deletedFor = conversation.deletedFor.filter((id: string) => id !== userId1);
+      await conversation.save();
     }
-    return conversation;
+
+    let listingTitle: string | undefined;
+    const lid = listingId || conversation.listingId;
+    if (lid) {
+      const listing = await ListingModel.findById(lid).select('title').lean();
+      if (listing) listingTitle = listing.title;
+    }
+
+    return { id: conversation.id, participants: conversation.participants, listingId: lid, listingTitle, isNew };
   }
 
   async getConversations(userId: string) {
     const conversations = await ConversationModel.find({
       participants: userId,
+      deletedFor: { $ne: userId },
     }).sort({ lastMessageAt: -1, createdAt: -1 });
 
     const result = [];
@@ -41,9 +53,16 @@ class ChatService {
         }
       }
 
+      let listingTitle: string | undefined;
+      if (conv.listingId) {
+        const listing = await ListingModel.findById(conv.listingId).select('title').lean();
+        if (listing) listingTitle = listing.title;
+      }
+
       const unreadCount = await MessageModel.countDocuments({
         conversationId: conv.id,
         senderId: { $ne: userId },
+        deletedFor: { $ne: userId },
         read: false,
       });
 
@@ -51,6 +70,7 @@ class ChatService {
         id: conv.id,
         participants: conv.participants,
         listingId: conv.listingId,
+        listingTitle,
         lastMessage: conv.lastMessage,
         lastMessageAt: conv.lastMessageAt,
         otherUser,
@@ -64,19 +84,20 @@ class ChatService {
   }
 
   async getMessages(conversationId: string, userId: string, page = 1, limit = 50) {
-    // Check that user is a participant
     const conversation = await ConversationModel.findById(conversationId);
     if (!conversation || !conversation.participants.includes(userId)) {
       throw new Error('Access denied');
     }
 
     const skip = (page - 1) * limit;
-    const messages = await MessageModel.find({ conversationId })
+    const messages = await MessageModel.find({
+      conversationId,
+      deletedFor: { $ne: userId },
+    })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
-    // Return in ascending order
     return messages.reverse();
   }
 
@@ -87,9 +108,11 @@ class ChatService {
       text,
     });
 
+    // Also clear deletedFor on conversation so both users see it again
     await ConversationModel.findByIdAndUpdate(conversationId, {
       lastMessage: text,
       lastMessageAt: new Date(),
+      deletedFor: [],
     });
 
     return message;
@@ -106,10 +129,48 @@ class ChatService {
     );
   }
 
+  async deleteMessage(messageId: string, userId: string, forBoth: boolean) {
+    const message = await MessageModel.findById(messageId);
+    if (!message) return null;
+
+    // Verify user is a participant of the conversation
+    const conv = await ConversationModel.findById(message.conversationId);
+    if (!conv || !conv.participants.includes(userId)) return null;
+
+    if (forBoth) {
+      await MessageModel.findByIdAndDelete(messageId);
+    } else {
+      await MessageModel.findByIdAndUpdate(messageId, {
+        $addToSet: { deletedFor: userId },
+      });
+    }
+    return { success: true };
+  }
+
+  async deleteConversation(conversationId: string, userId: string, forBoth: boolean) {
+    const conv = await ConversationModel.findById(conversationId);
+    if (!conv || !conv.participants.includes(userId)) return null;
+
+    if (forBoth) {
+      await MessageModel.deleteMany({ conversationId });
+      await ConversationModel.findByIdAndDelete(conversationId);
+    } else {
+      // Soft delete: hide conversation and all messages for this user
+      await ConversationModel.findByIdAndUpdate(conversationId, {
+        $addToSet: { deletedFor: userId },
+      });
+      await MessageModel.updateMany(
+        { conversationId },
+        { $addToSet: { deletedFor: userId } }
+      );
+    }
+    return { success: true };
+  }
+
   async getUnreadCount(userId: string) {
-    // Find all conversations where user is a participant
     const conversations = await ConversationModel.find({
       participants: userId,
+      deletedFor: { $ne: userId },
     }).select('_id');
 
     const conversationIds = conversations.map((c) => c.id);
@@ -117,6 +178,7 @@ class ChatService {
     const count = await MessageModel.countDocuments({
       conversationId: { $in: conversationIds },
       senderId: { $ne: userId },
+      deletedFor: { $ne: userId },
       read: false,
     });
 

@@ -30,6 +30,9 @@ export function initChatSocket(io: Server) {
           const receiverId = conv.participants.find((p: string) => p !== userId);
           if (receiverId) {
             io.to(receiverId).emit('new_message', { ...message.toObject(), conversationId: data.conversationId });
+            // Send updated unread count to receiver
+            const unreadCount = await chatService.getUnreadCount(receiverId);
+            io.to(receiverId).emit('unread_count', { count: unreadCount });
           }
         }
         socket.emit('message_sent', message.toObject());
@@ -40,6 +43,9 @@ export function initChatSocket(io: Server) {
 
     socket.on('mark_read', async (data: { conversationId: string }) => {
       await chatService.markAsRead(data.conversationId, userId);
+      // Send updated unread count back to the user
+      const unreadCount = await chatService.getUnreadCount(userId);
+      socket.emit('unread_count', { count: unreadCount });
     });
 
     socket.on('typing', async (data: { conversationId: string }) => {

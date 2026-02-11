@@ -71,6 +71,30 @@ router.patch('/conversations/:id/read', authMiddleware, checkNotBlocked, async (
   }
 });
 
+// DELETE /api/chat/messages/:id
+router.delete('/messages/:id', authMiddleware, checkNotBlocked, async (req: AuthRequest, res: Response) => {
+  try {
+    const forBoth = req.query.forBoth === 'true';
+    const result = await chatService.deleteMessage(req.params.id, req.user!.userId, forBoth);
+    if (!result) return res.status(404).json({ error: 'Message not found' });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Server error' });
+  }
+});
+
+// DELETE /api/chat/conversations/:id
+router.delete('/conversations/:id', authMiddleware, checkNotBlocked, async (req: AuthRequest, res: Response) => {
+  try {
+    const forBoth = req.query.forBoth === 'true';
+    const result = await chatService.deleteConversation(req.params.id, req.user!.userId, forBoth);
+    if (!result) return res.status(404).json({ error: 'Conversation not found' });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Server error' });
+  }
+});
+
 // GET /api/chat/unread
 router.get('/unread', authMiddleware, checkNotBlocked, async (req: AuthRequest, res: Response) => {
   try {

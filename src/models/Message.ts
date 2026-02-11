@@ -5,6 +5,7 @@ export interface IMessage extends Document {
   senderId: string;
   text: string;
   read: boolean;
+  deletedFor: string[];
   createdAt: Date;
 }
 
@@ -14,6 +15,7 @@ const messageSchema = new Schema<IMessage>(
     senderId: { type: String, required: true },
     text: { type: String, required: true },
     read: { type: Boolean, default: false },
+    deletedFor: { type: [String], default: [] },
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );

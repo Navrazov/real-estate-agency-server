@@ -5,6 +5,7 @@ export interface IConversation extends Document {
   listingId?: string;
   lastMessage?: string;
   lastMessageAt?: Date;
+  deletedFor: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -15,6 +16,7 @@ const conversationSchema = new Schema<IConversation>(
     listingId: { type: String },
     lastMessage: { type: String },
     lastMessageAt: { type: Date },
+    deletedFor: { type: [String], default: [] },
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
