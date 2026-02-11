@@ -5,6 +5,7 @@ import { ROLES } from '../../config/constants.js';
 import { UserModel, IUser } from '../../models/User.js';
 import type { JwtPayload } from '../../middlewares/auth.middleware.js';
 import type { LoginBody, RegisterBody, SendCodeBody, AuthResponse } from './auth.types.js';
+import { sendSmsCode } from '../../shared/sms.js';
 
 const SALT_ROUNDS = 10;
 const CODE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
@@ -46,14 +47,26 @@ export const authService = {
 
     smsCodeStore.set(phone, { code, expiresAt });
 
-    // In production this would send an SMS; for now just log it
-    console.log(`[SMS] Code for ${phone}: ${code}`);
+    // Send SMS via greenSMS (falls back to console log if not configured)
+    await sendSmsCode(phone, code);
 
     return { success: true };
   },
 
+  async verifyCode(phone: string, code: string): Promise<{ valid: true }> {
+    const storedEntry = smsCodeStore.get(phone);
+    if (!storedEntry || storedEntry.expiresAt <= Date.now()) {
+      smsCodeStore.delete(phone);
+      throw Object.assign(new Error('Код истёк. Запросите новый код.'), { statusCode: 400 });
+    }
+    if (storedEntry.code !== code) {
+      throw Object.assign(new Error('Неверный код подтверждения'), { statusCode: 400 });
+    }
+    return { valid: true };
+  },
+
   async register(body: RegisterBody): Promise<AuthResponse> {
-    const { phone, password, firstName, lastName, email, code, avatar } = body;
+    const { phone, password, firstName, lastName, code } = body;
 
     // Verify SMS code
     const storedEntry = smsCodeStore.get(phone);
@@ -72,21 +85,13 @@ export const authService = {
     const existingByPhone = await UserModel.findOne({ phone });
     if (existingByPhone) throw Object.assign(new Error('Phone already registered'), { statusCode: 400 });
 
-    // Check for existing user by email if provided
-    if (email) {
-      const existingByEmail = await UserModel.findOne({ email });
-      if (existingByEmail) throw Object.assign(new Error('Email already registered'), { statusCode: 400 });
-    }
-
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     const role = ROLES.USER;
     const name = `${firstName} ${lastName}`;
 
     const user = await UserModel.create({
       phone,
-      email: email || undefined,
       name,
-      avatar: avatar || undefined,
       passwordHash,
       role,
       phoneVerified: true,

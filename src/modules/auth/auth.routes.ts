@@ -29,8 +29,6 @@ const registerValidation = [
   body('firstName').notEmpty().withMessage('First name is required').isString().trim(),
   body('lastName').notEmpty().withMessage('Last name is required').isString().trim(),
   body('code').notEmpty().withMessage('Verification code is required').isString().trim(),
-  body('email').optional().isEmail().normalizeEmail(),
-  body('avatar').optional().isString().trim(),
 ];
 
 const sendCodeValidation = [
@@ -52,6 +50,31 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
       const result = await authService.sendCode(req.body);
+      res.json(result);
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.post(
+  '/verify-code',
+  authLimiter,
+  [
+    body('phone')
+      .notEmpty().withMessage('Phone is required')
+      .isString()
+      .trim()
+      .matches(/^\+?\d{7,15}$/).withMessage('Invalid phone format'),
+    body('code').notEmpty().withMessage('Code is required').isString().trim(),
+  ],
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+      const result = await authService.verifyCode(req.body.phone, req.body.code);
       res.json(result);
     } catch (e) {
       next(e);

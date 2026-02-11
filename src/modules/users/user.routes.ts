@@ -1,5 +1,5 @@
-import { Router } from 'express';
-import { param } from 'express-validator';
+import { Router, Response, NextFunction } from 'express';
+import { body, param, validationResult } from 'express-validator';
 import { authMiddleware, adminOnly, AuthRequest } from '../../middlewares/auth.middleware.js';
 import { checkNotBlocked } from '../../middlewares/blocked.middleware.js';
 import { userService } from './user.service.js';
@@ -47,6 +47,8 @@ router.get('/me', async (req: AuthRequest, res, next) => {
       role: user.role,
       blocked: user.blocked,
       favorites: user.favorites ?? [],
+      emailVerified: user.emailVerified,
+      phoneVerified: user.phoneVerified,
       createdAt: user.createdAt,
     });
   } catch (e) {
@@ -70,6 +72,112 @@ router.patch('/me', async (req: AuthRequest, res, next) => {
     next(e);
   }
 });
+
+// ── Email management ──
+
+router.post(
+  '/me/email/send-code',
+  [body('email').isEmail().withMessage('Valid email is required').normalizeEmail()],
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+      const result = await userService.sendEmailCode(req.user!.userId, req.body.email);
+      res.json(result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/me/email/verify',
+  [
+    body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
+    body('code').notEmpty().withMessage('Code is required').isString().trim(),
+  ],
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+      const user = await userService.verifyEmailCode(req.user!.userId, req.body.email, req.body.code);
+      res.json({
+        id: user._id.toString(),
+        email: user.email,
+        name: user.name,
+        phone: user.phone,
+        avatar: user.avatar,
+        role: user.role,
+        emailVerified: user.emailVerified,
+        phoneVerified: user.phoneVerified,
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+// ── Phone management ──
+
+router.post(
+  '/me/phone/send-code',
+  [
+    body('phone')
+      .notEmpty().withMessage('Phone is required')
+      .isString()
+      .trim()
+      .matches(/^\+?\d{7,15}$/).withMessage('Invalid phone format'),
+  ],
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+      const result = await userService.sendPhoneCode(req.user!.userId, req.body.phone);
+      res.json(result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/me/phone/verify',
+  [
+    body('phone')
+      .notEmpty().withMessage('Phone is required')
+      .isString()
+      .trim()
+      .matches(/^\+?\d{7,15}$/).withMessage('Invalid phone format'),
+    body('code').notEmpty().withMessage('Code is required').isString().trim(),
+  ],
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+      const user = await userService.verifyPhoneCode(req.user!.userId, req.body.phone, req.body.code);
+      res.json({
+        id: user._id.toString(),
+        email: user.email,
+        name: user.name,
+        phone: user.phone,
+        avatar: user.avatar,
+        role: user.role,
+        emailVerified: user.emailVerified,
+        phoneVerified: user.phoneVerified,
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 router.get('/favorites', async (req: AuthRequest, res, next) => {
   try {

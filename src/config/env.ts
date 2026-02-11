@@ -18,4 +18,5 @@ export const env = {
   smtpPass: process.env.SMTP_PASS || '',
   smtpFrom: process.env.SMTP_FROM || 'noreply@estatehub.com',
   appUrl: process.env.APP_URL || 'http://localhost:5173',
+  greensmsApiKey: process.env.GREENSMS_API_KEY || '',
 } as const;

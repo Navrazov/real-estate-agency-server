@@ -9,9 +9,7 @@ export interface RegisterBody {
   password: string;
   firstName: string;
   lastName: string;
-  email?: string;
   code: string;
-  avatar?: string;
 }
 
 export interface SendCodeBody {
