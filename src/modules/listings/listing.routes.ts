@@ -5,12 +5,14 @@ import { checkNotBlocked } from '../../middlewares/blocked.middleware.js';
 import { listingService } from './listing.service.js';
 import { userService } from '../users/user.service.js';
 import type { ListingsQuery } from './listing.types.js';
-import type { PropertyType, ListingStatus } from '../../shared/types.js';
+import type { PropertyType, ApartmentType, ListingStatus, PaymentType } from '../../shared/types.js';
 
 const router = Router();
 
-const PROPERTY_TYPES = ['apartment', 'house', 'room', 'land', 'commercial'];
+const PROPERTY_TYPES = ['apartment', 'house', 'land', 'commercial'];
+const APARTMENT_TYPES = ['new', 'secondary'];
 const LISTING_STATUSES = ['pending', 'active', 'sold', 'rented'];
+const PAYMENT_TYPES = ['cash', 'installment'];
 
 const createValidation = [
   body('title').trim().notEmpty().withMessage('Title required'),
@@ -18,12 +20,15 @@ const createValidation = [
   body('price').isFloat({ min: 0 }).withMessage('Price must be positive'),
   body('address').trim().notEmpty().withMessage('Address required'),
   body('propertyType').optional().isIn(PROPERTY_TYPES),
+  body('apartmentType').optional().isIn(APARTMENT_TYPES),
+  body('developer').optional().trim(),
+  body('complex').optional().trim(),
   body('rooms').optional().isInt({ min: 1, max: 50 }),
   body('area').optional().isFloat({ min: 1 }),
   body('floor').optional().isInt({ min: 0, max: 200 }),
   body('totalFloors').optional().isInt({ min: 1, max: 200 }),
-  body('images').optional().isArray(),
-  body('images.*').optional().isString(),
+  body('images').isArray({ min: 1 }).withMessage('At least one photo is required'),
+  body('images.*').isString(),
   body('lat').optional().isFloat(),
   body('lng').optional().isFloat(),
 ];
@@ -34,11 +39,14 @@ const updateValidation = [
   body('price').optional().isFloat({ min: 0 }),
   body('address').optional().trim().notEmpty(),
   body('propertyType').optional().isIn(PROPERTY_TYPES),
+  body('apartmentType').optional().isIn(APARTMENT_TYPES),
+  body('developer').optional().trim(),
+  body('complex').optional().trim(),
   body('rooms').optional().isInt({ min: 1, max: 50 }),
   body('area').optional().isFloat({ min: 1 }),
   body('floor').optional().isInt({ min: 0, max: 200 }),
   body('totalFloors').optional().isInt({ min: 1, max: 200 }),
-  body('images').optional().isArray(),
+  body('images').optional().isArray({ min: 1 }).withMessage('At least one photo is required'),
   body('images.*').optional().isString(),
   body('lat').optional().isFloat(),
   body('lng').optional().isFloat(),
@@ -66,6 +74,14 @@ router.get('/', optionalAuth, async (req: AuthRequest, res, next) => {
       propertyType: PROPERTY_TYPES.includes(req.query.propertyType as string)
         ? (req.query.propertyType as PropertyType)
         : undefined,
+      apartmentType: APARTMENT_TYPES.includes(req.query.apartmentType as string)
+        ? (req.query.apartmentType as ApartmentType)
+        : undefined,
+      paymentType: PAYMENT_TYPES.includes(req.query.paymentType as string)
+        ? (req.query.paymentType as PaymentType)
+        : undefined,
+      developer: typeof req.query.developer === 'string' && req.query.developer ? req.query.developer : undefined,
+      complex: typeof req.query.complex === 'string' && req.query.complex ? req.query.complex : undefined,
       status: LISTING_STATUSES.includes(req.query.status as string)
         ? (req.query.status as ListingStatus)
         : undefined,
@@ -90,6 +106,15 @@ router.get('/', optionalAuth, async (req: AuthRequest, res, next) => {
     };
     const result = await listingService.findAll(q, req.user?.userId);
     res.json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/filter-options', async (_req, res, next) => {
+  try {
+    const options = await listingService.getFilterOptions();
+    res.json(options);
   } catch (e) {
     next(e);
   }

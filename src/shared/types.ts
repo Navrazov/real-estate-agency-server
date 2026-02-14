@@ -13,7 +13,8 @@ export interface User {
   createdAt: string;
 }
 
-export type PropertyType = 'apartment' | 'house' | 'room' | 'land' | 'commercial';
+export type PropertyType = 'apartment' | 'house' | 'land' | 'commercial';
+export type ApartmentType = 'new' | 'secondary';
 export type ListingStatus = 'pending' | 'active' | 'sold' | 'rented';
 export type PaymentType = 'cash' | 'installment';
 export type ModerationStatus = 'pending' | 'approved' | 'rejected';
@@ -28,6 +29,9 @@ export interface Listing {
   installmentMonthly?: number;
   address: string;
   propertyType: PropertyType;
+  apartmentType?: ApartmentType;
+  developer?: string;
+  complex?: string;
   rooms?: number;
   area?: number;
   floor?: number;

@@ -18,6 +18,9 @@ async function toResponse(listing: IListing, userId?: string): Promise<ListingRe
     installmentMonthly: listing.installmentMonthly,
     address: listing.address,
     propertyType: listing.propertyType,
+    apartmentType: listing.apartmentType,
+    developer: listing.developer,
+    complex: listing.complex,
     rooms: listing.rooms,
     area: listing.area,
     floor: listing.floor,
@@ -49,6 +52,9 @@ export const listingService = {
       installmentMonthly: body.paymentType === 'installment' ? body.installmentMonthly : undefined,
       address: body.address,
       propertyType: body.propertyType ?? 'apartment',
+      apartmentType: body.propertyType === 'apartment' ? body.apartmentType : undefined,
+      developer: body.propertyType === 'apartment' ? body.developer : undefined,
+      complex: body.propertyType === 'apartment' ? body.complex : undefined,
       rooms: body.rooms,
       area: body.area,
       floor: body.floor,
@@ -56,7 +62,7 @@ export const listingService = {
       authorId,
       authorName,
       authorPhone,
-      images: body.images ?? [],
+      images: body.images,
       lat: body.lat,
       lng: body.lng,
       status: 'pending',
@@ -88,6 +94,10 @@ export const listingService = {
     }
 
     if (query.propertyType) filter.propertyType = query.propertyType;
+    if (query.apartmentType) filter.apartmentType = query.apartmentType;
+    if (query.paymentType) filter.paymentType = query.paymentType;
+    if (query.developer) filter.developer = query.developer;
+    if (query.complex) filter.complex = query.complex;
     if (query.status) filter.status = query.status;
     else filter.status = 'active';
 
@@ -192,6 +202,11 @@ export const listingService = {
     if (!listing) return null;
     if (listing.authorId !== authorId && !isAdmin) return null;
 
+    // Prevent setting status back to 'pending' on approved listings
+    if (body.status === 'pending' && listing.moderationStatus === 'approved') {
+      delete body.status;
+    }
+
     if (body.title !== undefined) listing.title = body.title;
     if (body.description !== undefined) listing.description = body.description;
     if (body.price !== undefined) listing.price = body.price;
@@ -209,7 +224,17 @@ export const listingService = {
       if (body.installmentMonthly !== undefined) listing.installmentMonthly = body.installmentMonthly;
     }
     if (body.address !== undefined) listing.address = body.address;
-    if (body.propertyType !== undefined) listing.propertyType = body.propertyType;
+    if (body.propertyType !== undefined) {
+      listing.propertyType = body.propertyType;
+      if (body.propertyType !== 'apartment') {
+        listing.apartmentType = undefined;
+        listing.developer = undefined;
+        listing.complex = undefined;
+      }
+    }
+    if (body.apartmentType !== undefined) listing.apartmentType = body.apartmentType;
+    if (body.developer !== undefined) listing.developer = body.developer;
+    if (body.complex !== undefined) listing.complex = body.complex;
     if (body.rooms !== undefined) listing.rooms = body.rooms;
     if (body.area !== undefined) listing.area = body.area;
     if (body.floor !== undefined) listing.floor = body.floor;
@@ -243,5 +268,15 @@ export const listingService = {
     const byType: Record<string, number> = {};
     typeAgg.forEach((t) => { byType[t._id] = t.count; });
     return { total, active, sold, rented, pending, totalViews, byType };
+  },
+
+  async getFilterOptions(): Promise<{ developers: string[]; complexes: string[] }> {
+    const filter = { status: 'active', moderationStatus: 'approved' };
+    const developers: string[] = await ListingModel.distinct('developer', filter);
+    const complexes: string[] = await ListingModel.distinct('complex', filter);
+    return {
+      developers: developers.filter(v => v && v.trim()).sort(),
+      complexes: complexes.filter(v => v && v.trim()).sort(),
+    };
   },
 };

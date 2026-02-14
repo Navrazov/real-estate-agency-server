@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import type { PropertyType, ListingStatus, PaymentType, ModerationStatus } from '../shared/types.js';
+import type { PropertyType, ApartmentType, ListingStatus, PaymentType, ModerationStatus } from '../shared/types.js';
 
 export interface IListing extends Document {
   title: string;
@@ -10,6 +10,9 @@ export interface IListing extends Document {
   installmentMonthly?: number;
   address: string;
   propertyType: PropertyType;
+  apartmentType?: ApartmentType;
+  developer?: string;
+  complex?: string;
   rooms?: number;
   area?: number;
   floor?: number;
@@ -41,9 +44,12 @@ const listingSchema = new Schema<IListing>(
     address: { type: String, required: true },
     propertyType: {
       type: String,
-      enum: ['apartment', 'house', 'room', 'land', 'commercial'],
+      enum: ['apartment', 'house', 'land', 'commercial'],
       default: 'apartment',
     },
+    apartmentType: { type: String, enum: ['new', 'secondary'] },
+    developer: { type: String },
+    complex: { type: String },
     rooms: { type: Number },
     area: { type: Number },
     floor: { type: Number },

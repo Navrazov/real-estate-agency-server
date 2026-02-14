@@ -1,4 +1,4 @@
-import type { PropertyType, ListingStatus, PaymentType, ModerationStatus } from '../../shared/types.js';
+import type { PropertyType, ApartmentType, ListingStatus, PaymentType, ModerationStatus } from '../../shared/types.js';
 
 export interface CreateListingBody {
   title: string;
@@ -9,11 +9,14 @@ export interface CreateListingBody {
   installmentMonthly?: number;
   address: string;
   propertyType?: PropertyType;
+  apartmentType?: ApartmentType;
+  developer?: string;
+  complex?: string;
   rooms?: number;
   area?: number;
   floor?: number;
   totalFloors?: number;
-  images?: string[];
+  images: string[];
   lat?: number;
   lng?: number;
 }
@@ -25,6 +28,10 @@ export interface UpdateListingBody extends Partial<CreateListingBody> {
 export interface ListingsQuery {
   search?: string;
   propertyType?: PropertyType;
+  apartmentType?: ApartmentType;
+  paymentType?: PaymentType;
+  developer?: string;
+  complex?: string;
   minPrice?: number;
   maxPrice?: number;
   minRooms?: number;
@@ -60,6 +67,9 @@ export interface ListingResponse {
   installmentMonthly?: number;
   address: string;
   propertyType: PropertyType;
+  apartmentType?: ApartmentType;
+  developer?: string;
+  complex?: string;
   rooms?: number;
   area?: number;
   floor?: number;
