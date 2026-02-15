@@ -46,11 +46,11 @@ class ChatService {
     const result = [];
     for (const conv of conversations) {
       const otherUserId = conv.participants.find((p: string) => p !== userId);
-      let otherUser: { id: string; name?: string; email?: string; lastSeen?: Date; online: boolean } | undefined;
+      let otherUser: { id: string; name?: string; email?: string; avatar?: string; lastSeen?: Date; online: boolean } | undefined;
       if (otherUserId) {
-        const user = await UserModel.findById(otherUserId).select('email name lastSeen');
+        const user = await UserModel.findById(otherUserId).select('email name lastSeen avatar');
         if (user) {
-          otherUser = { id: user.id, name: user.name, email: user.email, lastSeen: user.lastSeen, online: isOnline(user.id) };
+          otherUser = { id: user.id, name: user.name, email: user.email, avatar: user.avatar, lastSeen: user.lastSeen, online: isOnline(user.id) };
         }
       }
 
