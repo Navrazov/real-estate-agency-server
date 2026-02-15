@@ -23,7 +23,10 @@ app.use(cors());
 app.use(express.json());
 app.use(globalLimiter);
 app.use(requestLogger);
-app.use('/uploads', express.static(path.resolve(process.cwd(), env.uploadDir)));
+app.use('/uploads', express.static(path.resolve(process.cwd(), env.uploadDir), {
+  maxAge: '7d',
+  immutable: true,
+}));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
