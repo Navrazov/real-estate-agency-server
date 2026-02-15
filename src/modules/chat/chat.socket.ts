@@ -56,6 +56,14 @@ export function initChatSocket(io: Server) {
       // Send updated unread count back to the user
       const unreadCount = await chatService.getUnreadCount(userId);
       socket.emit('unread_count', { count: unreadCount });
+      // Notify the sender that their messages have been read
+      const conv = await chatService.getConversationById(data.conversationId);
+      if (conv) {
+        const senderId = conv.participants.find((p: string) => p !== userId);
+        if (senderId) {
+          io.to(senderId).emit('messages_read', { conversationId: data.conversationId });
+        }
+      }
     });
 
     socket.on('typing', async (data: { conversationId: string }) => {
