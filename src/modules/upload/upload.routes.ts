@@ -41,7 +41,7 @@ router.post(
     try {
       const files = (req as unknown as { files: Express.Multer.File[] }).files;
       if (!files?.length) return res.status(400).json({ error: 'No images' });
-      const base = `${req.protocol}://${req.get('host')}`;
+      const base = env.uploadsBaseUrl || `${req.protocol}://${req.get('host')}`;
       const urls = files.map((f) => `${base}/uploads/${f.filename}`);
       res.json({ urls });
     } catch (e) {
