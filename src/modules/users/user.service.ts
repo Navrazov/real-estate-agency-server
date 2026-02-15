@@ -35,6 +35,10 @@ export const userService = {
     return UserModel.find();
   },
 
+  async findAdmins(): Promise<IUser[]> {
+    return UserModel.find({ role: 'admin' });
+  },
+
   async updateProfile(userId: string, body: UpdateProfileBody): Promise<IUser | null> {
     const update: Record<string, unknown> = {};
     if (body.name !== undefined) update.name = body.name;

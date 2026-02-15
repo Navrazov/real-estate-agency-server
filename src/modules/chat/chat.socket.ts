@@ -2,6 +2,7 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { env } from '../../config/env.js';
 import { chatService } from './chat.service.js';
+import { notificationService } from '../notifications/notification.service.js';
 import type { JwtPayload } from '../../middlewares/auth.middleware.js';
 import { setOnline, setOffline } from './online.js';
 import { UserModel } from '../../models/User.js';
@@ -25,10 +26,15 @@ export function initChatSocket(io: Server) {
 
     setOnline(userId);
     UserModel.findByIdAndUpdate(userId, { lastSeen: new Date() }).catch(() => {});
+    // Broadcast online status to all connected clients
+    io.emit('user_online', { userId });
 
     socket.on('disconnect', () => {
       setOffline(userId);
+      const now = new Date().toISOString();
       UserModel.findByIdAndUpdate(userId, { lastSeen: new Date() }).catch(() => {});
+      // Broadcast offline status to all connected clients
+      io.emit('user_offline', { userId, lastSeen: now });
     });
 
     socket.on('send_message', async (data: { conversationId: string; text: string }) => {
@@ -43,6 +49,18 @@ export function initChatSocket(io: Server) {
             // Send updated unread count to receiver
             const unreadCount = await chatService.getUnreadCount(receiverId);
             io.to(receiverId).emit('unread_count', { count: unreadCount });
+            // Create notification for new message
+            const sender = await UserModel.findById(userId).lean();
+            const senderName = sender?.name || sender?.email?.split('@')[0] || 'Пользователь';
+            await notificationService.create(
+              receiverId,
+              'new_message',
+              'Новое сообщение',
+              `${senderName}: ${data.text.length > 100 ? data.text.slice(0, 100) + '...' : data.text}`,
+              { conversationId: data.conversationId }
+            );
+            const notifCount = await notificationService.getUnreadCount(receiverId);
+            io.to(receiverId).emit('notifications_count', { count: notifCount });
           }
         }
         socket.emit('message_sent', message.toObject());

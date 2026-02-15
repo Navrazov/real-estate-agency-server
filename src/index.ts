@@ -6,6 +6,7 @@ import app from './app.js';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { initChatSocket } from './modules/chat/chat.socket.js';
+import { setIo } from './shared/socket.js';
 
 try {
   fs.mkdirSync(env.uploadDir, { recursive: true });
@@ -15,6 +16,7 @@ try {
 const server = createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+setIo(io);
 initChatSocket(io);
 
 mongoose

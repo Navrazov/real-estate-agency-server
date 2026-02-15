@@ -4,6 +4,8 @@ import { authMiddleware, adminOnly, AuthRequest } from '../../middlewares/auth.m
 import { checkNotBlocked } from '../../middlewares/blocked.middleware.js';
 import { listingService } from './listing.service.js';
 import { userService } from '../users/user.service.js';
+import { notificationService } from '../notifications/notification.service.js';
+import { getIo } from '../../shared/socket.js';
 import type { ListingsQuery } from './listing.types.js';
 import type { PropertyType, ApartmentType, ListingStatus, PaymentType } from '../../shared/types.js';
 
@@ -146,6 +148,27 @@ router.patch('/:id/moderate', authMiddleware, adminOnly, async (req: AuthRequest
     }
     const listing = await listingService.moderate(req.params.id, req.user!.userId, action, note);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
+    // Notify listing author about moderation result
+    const isApproved = action === 'approve';
+    await notificationService.create(
+      listing.authorId,
+      isApproved ? 'listing_approved' : 'listing_rejected',
+      isApproved ? 'Объявление одобрено' : 'Объявление отклонено',
+      isApproved
+        ? `Ваше объявление «${listing.title}» прошло модерацию и опубликовано`
+        : `Ваше объявление «${listing.title}» отклонено${note ? ': ' + note : ''}`,
+      { listingId: listing.id }
+    );
+    const io = getIo();
+    if (io) {
+      const count = await notificationService.getUnreadCount(listing.authorId);
+      io.to(listing.authorId).emit('notification', {
+        type: isApproved ? 'listing_approved' : 'listing_rejected',
+        title: isApproved ? 'Объявление одобрено' : 'Объявление отклонено',
+        listingId: listing.id,
+      });
+      io.to(listing.authorId).emit('notifications_count', { count });
+    }
     res.json(listing);
   } catch (e) {
     next(e);
@@ -189,6 +212,27 @@ router.post(
         user?.name ?? user?.email?.split('@')[0],
         user?.phone
       );
+      // Notify admins about new listing pending moderation
+      const admins = await userService.findAdmins();
+      const io = getIo();
+      for (const admin of admins) {
+        await notificationService.create(
+          admin.id,
+          'new_listing_pending',
+          'Новое объявление на модерации',
+          `Пользователь ${user?.name || user?.email} подал объявление «${listing.title}»`,
+          { listingId: listing.id }
+        );
+        if (io) {
+          const count = await notificationService.getUnreadCount(admin.id);
+          io.to(admin.id).emit('notification', {
+            type: 'new_listing_pending',
+            title: 'Новое объявление на модерации',
+            listingId: listing.id,
+          });
+          io.to(admin.id).emit('notifications_count', { count });
+        }
+      }
       res.status(201).json(listing);
     } catch (e) {
       next(e);
