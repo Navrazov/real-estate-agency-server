@@ -77,6 +77,7 @@ export interface ListingResponse {
   authorId: string;
   authorName?: string;
   authorPhone?: string;
+  authorAvatar?: string;
   images: string[];
   lat?: number;
   lng?: number;

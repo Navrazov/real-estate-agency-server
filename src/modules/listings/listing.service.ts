@@ -28,6 +28,7 @@ async function toResponse(listing: IListing, userId?: string): Promise<ListingRe
     authorId: listing.authorId,
     authorName: listing.authorName ?? user?.name ?? user?.email?.split('@')[0],
     authorPhone: listing.authorPhone ?? user?.phone,
+    authorAvatar: user?.avatar,
     images: listing.images,
     lat: listing.lat,
     lng: listing.lng,
