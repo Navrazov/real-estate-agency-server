@@ -1,6 +1,5 @@
 import { UserModel, IUser } from '../../models/User.js';
 import { listingService } from '../listings/listing.service.js';
-import { sendEmailVerificationCode } from '../../shared/email.js';
 import { sendCallVerification } from '../../shared/sms.js';
 
 export interface UpdateProfileBody {
@@ -11,16 +10,12 @@ export interface UpdateProfileBody {
 
 const CODE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 
-// In-memory verification code stores
-const emailCodeStore = new Map<string, { code: string; expiresAt: number }>();
+// In-memory verification code store for phone changes
 const phoneCodeStore = new Map<string, { code: string; expiresAt: number }>();
 
 // Periodically clean expired codes every 5 minutes
 setInterval(() => {
   const now = Date.now();
-  for (const [key, entry] of emailCodeStore) {
-    if (entry.expiresAt <= now) emailCodeStore.delete(key);
-  }
   for (const [key, entry] of phoneCodeStore) {
     if (entry.expiresAt <= now) phoneCodeStore.delete(key);
   }
@@ -89,48 +84,6 @@ export const userService = {
     return { total, blocked, admins, recentWeek: recent };
   },
 
-  // ── Email verification code ──
-
-  async sendEmailCode(userId: string, email: string): Promise<{ success: true }> {
-    const code = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit
-    const expiresAt = Date.now() + CODE_EXPIRY_MS;
-
-    // Key combines userId + email so each user/email pair has its own code
-    emailCodeStore.set(`${userId}:${email}`, { code, expiresAt });
-
-    await sendEmailVerificationCode(email, code);
-    return { success: true };
-  },
-
-  async verifyEmailCode(userId: string, email: string, code: string): Promise<IUser> {
-    const key = `${userId}:${email}`;
-    const storedEntry = emailCodeStore.get(key);
-
-    if (!storedEntry || storedEntry.expiresAt <= Date.now()) {
-      emailCodeStore.delete(key);
-      throw Object.assign(new Error('No valid code found. Please request a new code.'), { statusCode: 400 });
-    }
-    if (storedEntry.code !== code) {
-      throw Object.assign(new Error('Invalid verification code'), { statusCode: 400 });
-    }
-
-    emailCodeStore.delete(key);
-
-    // Check if email is already taken by another user
-    const existingUser = await UserModel.findOne({ email, _id: { $ne: userId } });
-    if (existingUser) {
-      throw Object.assign(new Error('Email already taken by another user'), { statusCode: 400 });
-    }
-
-    const user = await UserModel.findByIdAndUpdate(
-      userId,
-      { email, emailVerified: true },
-      { new: true },
-    );
-    if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
-    return user;
-  },
-
   // ── Phone verification code ──
 
   async sendPhoneCode(userId: string, phone: string): Promise<{ success: true }> {
@@ -148,18 +101,17 @@ export const userService = {
 
     if (!storedEntry || storedEntry.expiresAt <= Date.now()) {
       phoneCodeStore.delete(key);
-      throw Object.assign(new Error('No valid code found. Please request a new code.'), { statusCode: 400 });
+      throw Object.assign(new Error('Код не найден или истёк. Запросите новый код.'), { statusCode: 400 });
     }
     if (storedEntry.code !== code) {
-      throw Object.assign(new Error('Invalid verification code'), { statusCode: 400 });
+      throw Object.assign(new Error('Неверный код подтверждения'), { statusCode: 400 });
     }
 
     phoneCodeStore.delete(key);
 
-    // Check if phone is already taken by another user
     const existingUser = await UserModel.findOne({ phone, _id: { $ne: userId } });
     if (existingUser) {
-      throw Object.assign(new Error('Phone already taken by another user'), { statusCode: 400 });
+      throw Object.assign(new Error('Этот номер уже привязан к другому аккаунту'), { statusCode: 400 });
     }
 
     const user = await UserModel.findByIdAndUpdate(
@@ -167,7 +119,7 @@ export const userService = {
       { phone, phoneVerified: true },
       { new: true },
     );
-    if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
+    if (!user) throw Object.assign(new Error('Пользователь не найден'), { statusCode: 404 });
     return user;
   },
 };

@@ -6,7 +6,7 @@ export async function checkNotBlocked(req: AuthRequest, res: Response, next: Nex
   if (!req.user) return next();
   const user = await userService.findById(req.user.userId);
   if (user?.blocked) {
-    return res.status(403).json({ error: 'Account is blocked' });
+    return res.status(403).json({ error: 'Аккаунт заблокирован' });
   }
   next();
 }

@@ -209,7 +209,7 @@ router.post(
       const listing = await listingService.create(
         req.user!.userId,
         req.body,
-        user?.name ?? user?.email?.split('@')[0],
+        user?.name ?? user?.phone ?? 'Пользователь',
         user?.phone
       );
       // Notify admins about new listing pending moderation
@@ -220,7 +220,7 @@ router.post(
           admin.id,
           'new_listing_pending',
           'Новое объявление на модерации',
-          `Пользователь ${user?.name || user?.email} подал объявление «${listing.title}»`,
+          `Пользователь ${user?.name || user?.phone} подал объявление «${listing.title}»`,
           { listingId: listing.id }
         );
         if (io) {

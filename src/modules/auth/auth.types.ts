@@ -1,6 +1,5 @@
 export interface LoginBody {
-  email?: string;
-  phone?: string;
+  phone: string;
   password: string;
 }
 
@@ -15,17 +14,16 @@ export interface RegisterBody {
 export interface SendCodeBody {
   phone: string;
   method?: 'call' | 'telegram';
+  checkExists?: boolean;
 }
 
 export interface AuthResponse {
   token: string;
   user: {
     id: string;
-    email?: string;
     phone?: string;
     name?: string;
     role: string;
-    emailVerified: boolean;
     phoneVerified: boolean;
   };
 }

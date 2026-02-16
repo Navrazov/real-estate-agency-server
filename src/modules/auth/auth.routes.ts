@@ -1,45 +1,42 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { body, query, validationResult } from 'express-validator';
+import { body, validationResult } from 'express-validator';
 import { authService } from './auth.service.js';
 import { authLimiter } from '../../middlewares/rate-limit.middleware.js';
 
 const router = Router();
 
 const loginValidation = [
-  body('password').notEmpty().withMessage('Password required'),
-  // At least one of email or phone must be provided - validated in custom check
-  body().custom((_, { req }) => {
-    const { email, phone } = req.body ?? {};
-    if (!email && !phone) {
-      throw new Error('Either email or phone is required');
-    }
-    return true;
-  }),
-  body('email').optional().isEmail().normalizeEmail(),
-  body('phone').optional().isString().trim(),
+  body('phone')
+    .notEmpty().withMessage('Укажите номер телефона')
+    .isString()
+    .trim(),
+  body('password').notEmpty().withMessage('Укажите пароль'),
 ];
 
 const registerValidation = [
   body('phone')
-    .notEmpty().withMessage('Phone is required')
+    .notEmpty().withMessage('Укажите номер телефона')
     .isString()
     .trim()
-    .matches(/^\+?\d{7,15}$/).withMessage('Invalid phone format'),
-  body('password').notEmpty().withMessage('Password required'),
-  body('firstName').notEmpty().withMessage('First name is required').isString().trim(),
-  body('lastName').notEmpty().withMessage('Last name is required').isString().trim(),
-  body('code').notEmpty().withMessage('Verification code is required').isString().trim(),
+    .matches(/^\+?\d{7,15}$/).withMessage('Неверный формат номера'),
+  body('password').notEmpty().withMessage('Укажите пароль'),
+  body('firstName').notEmpty().withMessage('Укажите имя').isString().trim(),
+  body('lastName').notEmpty().withMessage('Укажите фамилию').isString().trim(),
+  body('code').notEmpty().withMessage('Укажите код подтверждения').isString().trim(),
 ];
 
 const sendCodeValidation = [
   body('phone')
-    .notEmpty().withMessage('Phone is required')
+    .notEmpty().withMessage('Укажите номер телефона')
     .isString()
     .trim()
-    .matches(/^\+?\d{7,15}$/).withMessage('Invalid phone format'),
+    .matches(/^\+?\d{7,15}$/).withMessage('Неверный формат номера'),
   body('method')
     .optional()
-    .isIn(['call', 'telegram']).withMessage('Method must be "call" or "telegram"'),
+    .isIn(['call', 'telegram']).withMessage('Метод должен быть "call" или "telegram"'),
+  body('checkExists')
+    .optional()
+    .isBoolean(),
 ];
 
 router.post(
@@ -65,11 +62,11 @@ router.post(
   authLimiter,
   [
     body('phone')
-      .notEmpty().withMessage('Phone is required')
+      .notEmpty().withMessage('Укажите номер телефона')
       .isString()
       .trim()
-      .matches(/^\+?\d{7,15}$/).withMessage('Invalid phone format'),
-    body('code').notEmpty().withMessage('Code is required').isString().trim(),
+      .matches(/^\+?\d{7,15}$/).withMessage('Неверный формат номера'),
+    body('code').notEmpty().withMessage('Укажите код').isString().trim(),
   ],
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -114,41 +111,6 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
       const result = await authService.login(req.body);
-      res.json(result);
-    } catch (e) {
-      next(e);
-    }
-  }
-);
-
-router.get(
-  '/verify-email',
-  [query('token').notEmpty().withMessage('Token required')],
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-      const result = await authService.verifyEmail(req.query.token as string);
-      res.json(result);
-    } catch (e) {
-      next(e);
-    }
-  }
-);
-
-router.post(
-  '/resend-verification',
-  authLimiter,
-  [body('email').isEmail().normalizeEmail()],
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-      const result = await authService.resendVerification(req.body.email);
       res.json(result);
     } catch (e) {
       next(e);

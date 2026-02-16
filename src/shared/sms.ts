@@ -3,6 +3,9 @@ import { logger } from '../config/logger.js';
 
 const GREENSMS_BASE = 'https://api3.greensms.ru';
 
+// Log API key status on module load for production debugging
+logger.info(`[SMS] GREENSMS_API_KEY configured: ${env.greensmsApiKey ? 'yes' : 'NO (will use random codes)'}`);
+
 /**
  * Send call verification via GreenSMS Call API.
  * Returns the 4-digit code (last 4 digits of caller ID).

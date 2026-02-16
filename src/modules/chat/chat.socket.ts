@@ -51,7 +51,7 @@ export function initChatSocket(io: Server) {
             io.to(receiverId).emit('unread_count', { count: unreadCount });
             // Create notification for new message
             const sender = await UserModel.findById(userId).lean();
-            const senderName = sender?.name || sender?.email?.split('@')[0] || 'Пользователь';
+            const senderName = sender?.name || sender?.phone || 'Пользователь';
             await notificationService.create(
               receiverId,
               'new_message',

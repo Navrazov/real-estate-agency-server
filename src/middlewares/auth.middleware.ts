@@ -6,7 +6,6 @@ import { UserModel } from '../models/User.js';
 
 export interface JwtPayload {
   userId: string;
-  email: string;
   role: Role;
 }
 
@@ -17,7 +16,7 @@ export interface AuthRequest extends Request {
 export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ error: 'Необходима авторизация' });
   }
   const token = header.slice(7);
   try {
@@ -27,15 +26,15 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
     UserModel.findByIdAndUpdate(payload.userId, { lastSeen: new Date() }).catch(() => {});
     next();
   } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    return res.status(401).json({ error: 'Недействительный или истёкший токен' });
   }
 }
 
 export function requireRole(...roles: Role[]) {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+    if (!req.user) return res.status(401).json({ error: 'Необходима авторизация' });
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Forbidden' });
+      return res.status(403).json({ error: 'Доступ запрещён' });
     }
     next();
   };

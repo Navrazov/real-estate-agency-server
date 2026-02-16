@@ -10,7 +10,7 @@ const router = Router();
 router.get('/profile/:id', async (req, res, next) => {
   try {
     const user = await userService.findById(req.params.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
 
     const { isOnline: checkOnline } = await import('../chat/online.js');
     const listings = await (await import('../listings/listing.service.js')).listingService.findActiveByAuthor(req.params.id);
@@ -18,7 +18,6 @@ router.get('/profile/:id', async (req, res, next) => {
     res.json({
       id: user._id.toString(),
       name: user.name,
-      email: user.email,
       phone: user.phone,
       avatar: user.avatar,
       createdAt: user.createdAt,
@@ -37,17 +36,15 @@ router.use(checkNotBlocked);
 router.get('/me', async (req: AuthRequest, res, next) => {
   try {
     const user = await userService.findById(req.user!.userId);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
     res.json({
       id: user._id.toString(),
-      email: user.email,
       name: user.name,
       phone: user.phone,
       avatar: user.avatar,
       role: user.role,
       blocked: user.blocked,
       favorites: user.favorites ?? [],
-      emailVerified: user.emailVerified,
       phoneVerified: user.phoneVerified,
       createdAt: user.createdAt,
     });
@@ -59,10 +56,9 @@ router.get('/me', async (req: AuthRequest, res, next) => {
 router.patch('/me', async (req: AuthRequest, res, next) => {
   try {
     const user = await userService.updateProfile(req.user!.userId, req.body);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
     res.json({
       id: user._id.toString(),
-      email: user.email,
       name: user.name,
       phone: user.phone,
       avatar: user.avatar,
@@ -73,64 +69,16 @@ router.patch('/me', async (req: AuthRequest, res, next) => {
   }
 });
 
-// ── Email management ──
-
-router.post(
-  '/me/email/send-code',
-  [body('email').isEmail().withMessage('Valid email is required').normalizeEmail()],
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-      const result = await userService.sendEmailCode(req.user!.userId, req.body.email);
-      res.json(result);
-    } catch (e) {
-      next(e);
-    }
-  },
-);
-
-router.post(
-  '/me/email/verify',
-  [
-    body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
-    body('code').notEmpty().withMessage('Code is required').isString().trim(),
-  ],
-  async (req: AuthRequest, res: Response, next: NextFunction) => {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-      }
-      const user = await userService.verifyEmailCode(req.user!.userId, req.body.email, req.body.code);
-      res.json({
-        id: user._id.toString(),
-        email: user.email,
-        name: user.name,
-        phone: user.phone,
-        avatar: user.avatar,
-        role: user.role,
-        emailVerified: user.emailVerified,
-        phoneVerified: user.phoneVerified,
-      });
-    } catch (e) {
-      next(e);
-    }
-  },
-);
-
 // ── Phone management ──
 
 router.post(
   '/me/phone/send-code',
   [
     body('phone')
-      .notEmpty().withMessage('Phone is required')
+      .notEmpty().withMessage('Укажите номер телефона')
       .isString()
       .trim()
-      .matches(/^\+?\d{7,15}$/).withMessage('Invalid phone format'),
+      .matches(/^\+?\d{7,15}$/).withMessage('Неверный формат номера'),
   ],
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
@@ -150,11 +98,11 @@ router.post(
   '/me/phone/verify',
   [
     body('phone')
-      .notEmpty().withMessage('Phone is required')
+      .notEmpty().withMessage('Укажите номер телефона')
       .isString()
       .trim()
-      .matches(/^\+?\d{7,15}$/).withMessage('Invalid phone format'),
-    body('code').notEmpty().withMessage('Code is required').isString().trim(),
+      .matches(/^\+?\d{7,15}$/).withMessage('Неверный формат номера'),
+    body('code').notEmpty().withMessage('Укажите код').isString().trim(),
   ],
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
@@ -165,12 +113,10 @@ router.post(
       const user = await userService.verifyPhoneCode(req.user!.userId, req.body.phone, req.body.code);
       res.json({
         id: user._id.toString(),
-        email: user.email,
         name: user.name,
         phone: user.phone,
         avatar: user.avatar,
         role: user.role,
-        emailVerified: user.emailVerified,
         phoneVerified: user.phoneVerified,
       });
     } catch (e) {
@@ -191,7 +137,7 @@ router.get('/favorites', async (req: AuthRequest, res, next) => {
 router.post('/favorites/:listingId', param('listingId').notEmpty(), async (req: AuthRequest, res, next) => {
   try {
     const result = await userService.toggleFavorite(req.user!.userId, req.params.listingId);
-    if (!result) return res.status(404).json({ error: 'User not found' });
+    if (!result) return res.status(404).json({ error: 'Пользователь не найден' });
     res.json(result);
   } catch (e) {
     next(e);
@@ -202,7 +148,7 @@ router.get('/', authMiddleware, adminOnly, async (_req, res, next) => {
   try {
     const users = (await userService.findAll()).map((u) => ({
       id: u._id.toString(),
-      email: u.email,
+      phone: u.phone,
       name: u.name,
       role: u.role,
       blocked: u.blocked,
@@ -228,10 +174,10 @@ router.patch('/:id/role', authMiddleware, adminOnly, async (req, res, next) => {
     const { id } = req.params;
     const { role } = req.body;
     if (!role || !['user', 'admin'].includes(role)) {
-      return res.status(400).json({ error: 'Role must be "user" or "admin"' });
+      return res.status(400).json({ error: 'Роль должна быть "user" или "admin"' });
     }
     const user = await userService.setRole(id, role);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
     res.json({ id: user._id.toString(), role: user.role });
   } catch (e) {
     next(e);
@@ -243,7 +189,7 @@ router.patch('/:id/block', authMiddleware, adminOnly, async (req, res, next) => 
     const { id } = req.params;
     const blocked = req.body.blocked === true;
     const user = await userService.setBlocked(id, blocked);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
     res.json({ id: user._id.toString(), blocked: user.blocked });
   } catch (e) {
     next(e);

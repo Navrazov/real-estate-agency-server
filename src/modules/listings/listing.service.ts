@@ -39,7 +39,7 @@ function buildResponse(
     floor: listing.floor,
     totalFloors: listing.totalFloors,
     authorId: listing.authorId,
-    authorName: listing.authorName ?? author?.name ?? author?.email?.split('@')[0],
+    authorName: listing.authorName ?? author?.name ?? author?.phone ?? 'Пользователь',
     authorPhone: listing.authorPhone ?? author?.phone,
     authorAvatar: author?.avatar,
     authorVerified: author?.verified ?? false,
