@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import sharp from 'sharp';
 import { env } from '../../config/env.js';
 import { authMiddleware, AuthRequest } from '../../middlewares/auth.middleware.js';
 import { checkNotBlocked } from '../../middlewares/blocked.middleware.js';
@@ -13,17 +14,9 @@ try {
   fs.mkdirSync(uploadDir, { recursive: true });
 } catch {}
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.jpg';
-    const name = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}${ext}`;
-    cb(null, name);
-  },
-});
-
+// Use memory storage so we can process with sharp before saving
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = /^image\/(jpeg|png|gif|webp)$/i;
@@ -32,17 +25,36 @@ const upload = multer({
   },
 });
 
+const MAX_WIDTH = 1920;
+const MAX_HEIGHT = 1080;
+const QUALITY = 80;
+
 router.post(
   '/',
   authMiddleware,
   checkNotBlocked,
   upload.array('images', 10),
-  (req: AuthRequest, res, next) => {
+  async (req: AuthRequest, res, next) => {
     try {
       const files = (req as unknown as { files: Express.Multer.File[] }).files;
       if (!files?.length) return res.status(400).json({ error: 'No images' });
+
       const base = env.uploadsBaseUrl || `${req.protocol}://${req.get('host')}`;
-      const urls = files.map((f) => `${base}/uploads/${f.filename}`);
+      const urls: string[] = [];
+
+      for (const file of files) {
+        const name = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}.webp`;
+        const outputPath = path.join(uploadDir, name);
+
+        // Resize and convert to WebP
+        await sharp(file.buffer)
+          .resize(MAX_WIDTH, MAX_HEIGHT, { fit: 'inside', withoutEnlargement: true })
+          .webp({ quality: QUALITY })
+          .toFile(outputPath);
+
+        urls.push(`${base}/uploads/${name}`);
+      }
+
       res.json({ urls });
     } catch (e) {
       next(e);

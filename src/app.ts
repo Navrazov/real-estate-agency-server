@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { env } from './config/env.js';
@@ -11,6 +12,8 @@ import { chatRoutes } from './modules/chat/chat.routes.js';
 import { notificationRoutes } from './modules/notifications/notification.routes.js';
 import { analyticsRoutes } from './modules/analytics/analytics.routes.js';
 import { sitemapRoutes } from './modules/sitemap/sitemap.routes.js';
+import { subscriptionRoutes } from './modules/subscriptions/subscription.routes.js';
+import { noteRoutes } from './modules/notes/note.routes.js';
 import { errorMiddleware } from './middlewares/error.middleware.js';
 import { globalLimiter } from './middlewares/rate-limit.middleware.js';
 import { requestLogger } from './middlewares/request-logger.middleware.js';
@@ -20,6 +23,7 @@ const app = express();
 
 app.set('trust proxy', true);
 app.use(cors());
+app.use(compression());
 app.use(express.json());
 app.use(globalLimiter);
 app.use(requestLogger);
@@ -35,6 +39,8 @@ app.use('/api/listings', listingRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/notes', noteRoutes);
 app.use(sitemapRoutes);
 
 app.use(errorMiddleware);

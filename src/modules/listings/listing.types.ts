@@ -1,10 +1,11 @@
-import type { PropertyType, ApartmentType, ListingStatus, PaymentType, ModerationStatus } from '../../shared/types.js';
+import type { PropertyType, ApartmentType, ListingStatus, PaymentType, DealType, ModerationStatus } from '../../shared/types.js';
 
 export interface CreateListingBody {
   title: string;
   description: string;
   price: number;
   paymentType?: PaymentType;
+  dealType?: DealType;
   installmentMonths?: number;
   installmentMonthly?: number;
   address: string;
@@ -19,6 +20,11 @@ export interface CreateListingBody {
   images: string[];
   lat?: number;
   lng?: number;
+  // Assignment fields
+  dduNumber?: string;
+  dduDate?: string;
+  assignmentOriginalPrice?: number;
+  completionDate?: string;
 }
 
 export interface UpdateListingBody extends Partial<CreateListingBody> {
@@ -30,6 +36,7 @@ export interface ListingsQuery {
   propertyType?: PropertyType;
   apartmentType?: ApartmentType;
   paymentType?: PaymentType;
+  dealType?: DealType;
   developer?: string;
   complex?: string;
   minPrice?: number;
@@ -63,6 +70,7 @@ export interface ListingResponse {
   description: string;
   price: number;
   paymentType: PaymentType;
+  dealType: string;
   installmentMonths?: number;
   installmentMonthly?: number;
   address: string;
@@ -78,6 +86,7 @@ export interface ListingResponse {
   authorName?: string;
   authorPhone?: string;
   authorAvatar?: string;
+  authorVerified?: boolean;
   images: string[];
   lat?: number;
   lng?: number;
@@ -88,6 +97,11 @@ export interface ListingResponse {
   isFavorite?: boolean;
   createdAt: string;
   updatedAt: string;
+  // Assignment fields
+  dduNumber?: string;
+  dduDate?: string;
+  assignmentOriginalPrice?: number;
+  completionDate?: string;
 }
 
 export interface ModerationAction {

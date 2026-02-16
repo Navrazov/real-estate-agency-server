@@ -17,6 +17,7 @@ export type PropertyType = 'apartment' | 'house' | 'land' | 'commercial';
 export type ApartmentType = 'new' | 'secondary';
 export type ListingStatus = 'pending' | 'active' | 'sold' | 'rented';
 export type PaymentType = 'cash' | 'installment';
+export type DealType = 'sale' | 'assignment';
 export type ModerationStatus = 'pending' | 'approved' | 'rejected';
 
 export interface Listing {
@@ -25,6 +26,7 @@ export interface Listing {
   description: string;
   price: number;
   paymentType: PaymentType;
+  dealType: DealType;
   installmentMonths?: number;
   installmentMonthly?: number;
   address: string;
@@ -50,4 +52,9 @@ export interface Listing {
   views: number;
   createdAt: string;
   updatedAt: string;
+  // Assignment (переуступка) fields
+  dduNumber?: string;
+  dduDate?: string;
+  assignmentOriginalPrice?: number;
+  completionDate?: string;
 }

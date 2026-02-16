@@ -41,8 +41,8 @@ export const authService = {
   async sendCode(body: SendCodeBody): Promise<{ success: true }> {
     const { phone } = body;
 
-    // Generate random 4-digit code
-    const code = String(Math.floor(1000 + Math.random() * 9000));
+    // Generate random 6-digit code
+    const code = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAt = Date.now() + CODE_EXPIRY_MS;
 
     smsCodeStore.set(phone, { code, expiresAt });

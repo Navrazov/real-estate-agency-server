@@ -17,6 +17,10 @@ export interface IUser extends Document {
   verificationToken?: string;
   verificationTokenExpiresAt?: Date;
   lastSeen?: Date;
+  // Agent verification
+  verified: boolean;
+  agency?: string;
+  verificationDocUrl?: string;
   createdAt: Date;
 }
 
@@ -37,6 +41,10 @@ const userSchema = new Schema<IUser>(
     verificationToken: { type: String },
     verificationTokenExpiresAt: { type: Date },
     lastSeen: { type: Date },
+    // Agent verification
+    verified: { type: Boolean, default: false },
+    agency: { type: String },
+    verificationDocUrl: { type: String },
   },
   { timestamps: true }
 );

@@ -1,19 +1,32 @@
 import { ListingModel } from '../../models/Listing.js';
 import { UserModel } from '../../models/User.js';
+import { subscriptionService } from '../subscriptions/subscription.service.js';
 import type { CreateListingBody, UpdateListingBody, ListingsQuery, ListingsResponse, ListingResponse } from './listing.types.js';
 import type { FilterQuery, SortOrder } from 'mongoose';
 import type { IListing } from '../../models/Listing.js';
+import type { IUser } from '../../models/User.js';
 
+// Single listing response (used for create, update, findById)
 async function toResponse(listing: IListing, userId?: string): Promise<ListingResponse> {
-  const user = await UserModel.findById(listing.authorId).lean();
+  const user = await UserModel.findById(listing.authorId).lean() as Partial<IUser> | null;
   const favUser = userId ? await UserModel.findById(userId).lean() : null;
   const favorites = favUser?.favorites ?? [];
+  return buildResponse(listing, user, favorites);
+}
+
+// Build response from pre-loaded data (no extra DB queries)
+function buildResponse(
+  listing: IListing,
+  author: Partial<IUser> | null,
+  favorites: string[] = [],
+): ListingResponse {
   return {
     id: listing._id.toString(),
     title: listing.title,
     description: listing.description,
     price: listing.price,
     paymentType: listing.paymentType,
+    dealType: listing.dealType ?? 'sale',
     installmentMonths: listing.installmentMonths,
     installmentMonthly: listing.installmentMonthly,
     address: listing.address,
@@ -26,9 +39,10 @@ async function toResponse(listing: IListing, userId?: string): Promise<ListingRe
     floor: listing.floor,
     totalFloors: listing.totalFloors,
     authorId: listing.authorId,
-    authorName: listing.authorName ?? user?.name ?? user?.email?.split('@')[0],
-    authorPhone: listing.authorPhone ?? user?.phone,
-    authorAvatar: user?.avatar,
+    authorName: listing.authorName ?? author?.name ?? author?.email?.split('@')[0],
+    authorPhone: listing.authorPhone ?? author?.phone,
+    authorAvatar: author?.avatar,
+    authorVerified: author?.verified ?? false,
     images: listing.images,
     lat: listing.lat,
     lng: listing.lng,
@@ -39,16 +53,53 @@ async function toResponse(listing: IListing, userId?: string): Promise<ListingRe
     isFavorite: favorites.includes(listing._id.toString()),
     createdAt: listing.createdAt.toISOString(),
     updatedAt: listing.updatedAt.toISOString(),
+    // Assignment fields
+    dduNumber: listing.dduNumber,
+    dduDate: listing.dduDate?.toISOString(),
+    assignmentOriginalPrice: listing.assignmentOriginalPrice,
+    completionDate: listing.completionDate?.toISOString(),
   };
+}
+
+// Batch-load authors for a list of listings (fixes N+1)
+async function batchResponses(
+  listings: IListing[],
+  userId?: string,
+): Promise<ListingResponse[]> {
+  if (listings.length === 0) return [];
+
+  // Collect unique author IDs
+  const authorIds = [...new Set(listings.map(l => l.authorId))];
+
+  // Batch load authors in one query
+  const authors = await UserModel.find({ _id: { $in: authorIds } }).lean();
+  const authorMap = new Map(authors.map(a => [a._id.toString(), a]));
+
+  // Load favorites for requesting user (single query)
+  let favorites: string[] = [];
+  if (userId) {
+    const favUser = await UserModel.findById(userId).select('favorites').lean();
+    favorites = favUser?.favorites ?? [];
+  }
+
+  return listings.map(l => buildResponse(l, (authorMap.get(l.authorId) as Partial<IUser> | undefined) ?? null, favorites));
 }
 
 export const listingService = {
   async create(authorId: string, body: CreateListingBody, authorName?: string, authorPhone?: string): Promise<ListingResponse> {
+    // Check subscription limits
+    const check = await subscriptionService.canCreateListing(authorId);
+    if (!check.allowed) {
+      throw Object.assign(new Error(check.reason!), { statusCode: 403 });
+    }
+
+    const isAssignment = body.dealType === 'assignment';
     const listing = await ListingModel.create({
       title: body.title,
       description: body.description,
       price: body.price,
       paymentType: body.paymentType ?? 'cash',
+      dealType: body.dealType ?? 'sale',
       installmentMonths: body.paymentType === 'installment' ? body.installmentMonths : undefined,
       installmentMonthly: body.paymentType === 'installment' ? body.installmentMonthly : undefined,
       address: body.address,
@@ -68,6 +119,11 @@ export const listingService = {
       lng: body.lng,
       status: 'pending',
       moderationStatus: 'pending',
+      // Assignment fields
+      dduNumber: isAssignment ? body.dduNumber : undefined,
+      dduDate: isAssignment && body.dduDate ? new Date(body.dduDate) : undefined,
+      assignmentOriginalPrice: isAssignment ? body.assignmentOriginalPrice : undefined,
+      completionDate: isAssignment && body.completionDate ? new Date(body.completionDate) : undefined,
     });
     return toResponse(listing, authorId);
   },
@@ -97,6 +153,7 @@ export const listingService = {
     if (query.propertyType) filter.propertyType = query.propertyType;
     if (query.apartmentType) filter.apartmentType = query.apartmentType;
     if (query.paymentType) filter.paymentType = query.paymentType;
+    if (query.dealType) filter.dealType = query.dealType;
     if (query.developer) filter.developer = query.developer;
     if (query.complex) filter.complex = query.complex;
     if (query.status) filter.status = query.status;
@@ -143,18 +200,14 @@ export const listingService = {
     const offset = (page - 1) * limit;
 
     const listings = await ListingModel.find(filter).sort(sort).skip(offset).limit(limit).lean();
-    const items = await Promise.all(
-      listings.map((l) => toResponse(l as unknown as IListing, userId))
-    );
+    const items = await batchResponses(listings as unknown as IListing[], userId);
 
     return { items, total, page, limit, totalPages };
   },
 
   async findByAuthor(authorId: string, userId?: string): Promise<ListingResponse[]> {
     const listings = await ListingModel.find({ authorId }).sort({ createdAt: -1 }).lean();
-    return Promise.all(
-      listings.map((l) => toResponse(l as unknown as IListing, userId))
-    );
+    return batchResponses(listings as unknown as IListing[], userId);
   },
 
   async findActiveByAuthor(authorId: string) {
@@ -176,9 +229,7 @@ export const listingService = {
 
   async findPendingModeration(): Promise<ListingResponse[]> {
     const listings = await ListingModel.find({ moderationStatus: 'pending' }).sort({ createdAt: 1 }).lean();
-    return Promise.all(
-      listings.map((l) => toResponse(l as unknown as IListing))
-    );
+    return batchResponses(listings as unknown as IListing[]);
   },
 
   async moderate(id: string, adminId: string, action: 'approve' | 'reject', note?: string): Promise<ListingResponse | null> {
@@ -244,6 +295,21 @@ export const listingService = {
     if (body.lat !== undefined) listing.lat = body.lat;
     if (body.lng !== undefined) listing.lng = body.lng;
     if (body.status !== undefined) listing.status = body.status;
+    // Deal type & assignment fields
+    if (body.dealType !== undefined) {
+      listing.dealType = body.dealType;
+      if (body.dealType === 'assignment') {
+        if (body.dduNumber !== undefined) listing.dduNumber = body.dduNumber;
+        if (body.dduDate !== undefined) listing.dduDate = new Date(body.dduDate);
+        if (body.assignmentOriginalPrice !== undefined) listing.assignmentOriginalPrice = body.assignmentOriginalPrice;
+        if (body.completionDate !== undefined) listing.completionDate = new Date(body.completionDate);
+      } else {
+        listing.dduNumber = undefined;
+        listing.dduDate = undefined;
+        listing.assignmentOriginalPrice = undefined;
+        listing.completionDate = undefined;
+      }
+    }
 
     await listing.save();
     return toResponse(listing, authorId);

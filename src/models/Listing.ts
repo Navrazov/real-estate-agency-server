@@ -1,11 +1,12 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import type { PropertyType, ApartmentType, ListingStatus, PaymentType, ModerationStatus } from '../shared/types.js';
+import type { PropertyType, ApartmentType, ListingStatus, PaymentType, DealType, ModerationStatus } from '../shared/types.js';
 
 export interface IListing extends Document {
   title: string;
   description: string;
   price: number;
   paymentType: PaymentType;
+  dealType: DealType;
   installmentMonths?: number;
   installmentMonthly?: number;
   address: string;
@@ -31,6 +32,11 @@ export interface IListing extends Document {
   views: number;
   createdAt: Date;
   updatedAt: Date;
+  // Assignment (переуступка) fields
+  dduNumber?: string;
+  dduDate?: Date;
+  assignmentOriginalPrice?: number;
+  completionDate?: Date;
 }
 
 const listingSchema = new Schema<IListing>(
@@ -39,6 +45,7 @@ const listingSchema = new Schema<IListing>(
     description: { type: String, required: true },
     price: { type: Number, required: true, min: 0 },
     paymentType: { type: String, enum: ['cash', 'installment'], default: 'cash' },
+    dealType: { type: String, enum: ['sale', 'assignment'], default: 'sale' },
     installmentMonths: { type: Number },
     installmentMonthly: { type: Number },
     address: { type: String, required: true },
@@ -66,6 +73,11 @@ const listingSchema = new Schema<IListing>(
     moderatedBy: { type: String },
     moderatedAt: { type: Date },
     views: { type: Number, default: 0 },
+    // Assignment (переуступка) fields
+    dduNumber: { type: String },
+    dduDate: { type: Date },
+    assignmentOriginalPrice: { type: Number },
+    completionDate: { type: Date },
   },
   { timestamps: true }
 );

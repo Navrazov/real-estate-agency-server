@@ -134,7 +134,7 @@ export const userService = {
   // ── Phone verification code ──
 
   async sendPhoneCode(userId: string, phone: string): Promise<{ success: true }> {
-    const code = String(Math.floor(1000 + Math.random() * 9000)); // 4-digit
+    const code = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit
     const expiresAt = Date.now() + CODE_EXPIRY_MS;
 
     phoneCodeStore.set(`${userId}:${phone}`, { code, expiresAt });
