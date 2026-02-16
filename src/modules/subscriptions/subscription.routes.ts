@@ -31,7 +31,7 @@ router.post(
   authMiddleware,
   checkNotBlocked,
   [
-    body('plan').isIn(['pro']).withMessage('Invalid plan'),
+    body('plan').isIn(['pro', 'premium']).withMessage('Invalid plan'),
     body('duration').isIn([1, 12]).withMessage('Duration must be 1 or 12 months'),
   ],
   async (req: AuthRequest, res: Response, next: NextFunction) => {

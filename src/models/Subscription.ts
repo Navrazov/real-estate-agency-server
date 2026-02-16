@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export type SubscriptionPlan = 'free' | 'pro';
+export type SubscriptionPlan = 'free' | 'pro' | 'premium';
 
 export interface ISubscription extends Document {
   userId: string;
@@ -15,7 +15,7 @@ export interface ISubscription extends Document {
 const subscriptionSchema = new Schema<ISubscription>(
   {
     userId: { type: String, required: true, index: true },
-    plan: { type: String, enum: ['free', 'pro'], default: 'free' },
+    plan: { type: String, enum: ['free', 'pro', 'premium'], default: 'free' },
     startDate: { type: Date, default: Date.now },
     endDate: { type: Date, default: null },
     active: { type: Boolean, default: true },
@@ -30,15 +30,25 @@ export const SubscriptionModel = mongoose.model<ISubscription>('Subscription', s
 // Plan limits
 export const PLAN_LIMITS = {
   free: {
-    maxListings: 3,
-    maxConversations: 5,
+    maxActiveListings: 0,
+    maxMonthlyListings: 0,
+    maxVisibleListings: 5,
     canSeePhones: false,
     priorityPlacement: false,
     advancedStats: false,
   },
   pro: {
-    maxListings: Infinity,
-    maxConversations: Infinity,
+    maxActiveListings: 5,
+    maxMonthlyListings: 30,
+    maxVisibleListings: Infinity,
+    canSeePhones: true,
+    priorityPlacement: true,
+    advancedStats: false,
+  },
+  premium: {
+    maxActiveListings: Infinity,
+    maxMonthlyListings: Infinity,
+    maxVisibleListings: Infinity,
     canSeePhones: true,
     priorityPlacement: true,
     advancedStats: true,
@@ -48,7 +58,12 @@ export const PLAN_LIMITS = {
 export const PLAN_PRICES = {
   pro: {
     monthly: 1490,
-    yearly: 990, // per month when paid yearly
-    yearlyTotal: 11880,
+    yearly: 1190,
+    yearlyTotal: 14280,
+  },
+  premium: {
+    monthly: 2490,
+    yearly: 1990,
+    yearlyTotal: 23880,
   },
 } as const;

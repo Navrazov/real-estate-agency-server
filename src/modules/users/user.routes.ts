@@ -18,7 +18,7 @@ router.get('/profile/:id', async (req, res, next) => {
     res.json({
       id: user._id.toString(),
       name: user.name,
-      phone: user.phone,
+      phone: user.phoneHidden ? undefined : user.phone,
       avatar: user.avatar,
       createdAt: user.createdAt,
       lastSeen: user.lastSeen,
@@ -46,6 +46,7 @@ router.get('/me', async (req: AuthRequest, res, next) => {
       avatar: user.avatar,
       role: user.role,
       blocked: user.blocked,
+      phoneHidden: user.phoneHidden ?? false,
       favorites: user.favorites ?? [],
       phoneVerified: user.phoneVerified,
       createdAt: user.createdAt,
@@ -65,6 +66,7 @@ router.patch('/me', async (req: AuthRequest, res, next) => {
       phone: user.phone,
       avatar: user.avatar,
       role: user.role,
+      phoneHidden: user.phoneHidden ?? false,
     });
   } catch (e) {
     next(e);

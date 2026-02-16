@@ -9,6 +9,7 @@ export interface RegisterBody {
   firstName: string;
   lastName: string;
   code: string;
+  phoneHidden?: boolean;
 }
 
 export interface SendCodeBody {
@@ -34,5 +35,6 @@ export interface AuthResponse {
     lastName?: string;
     role: string;
     phoneVerified: boolean;
+    phoneHidden?: boolean;
   };
 }

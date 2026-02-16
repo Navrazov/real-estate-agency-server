@@ -3,6 +3,9 @@ import { body, param, validationResult } from 'express-validator';
 import { authMiddleware, adminOnly, AuthRequest } from '../../middlewares/auth.middleware.js';
 import { checkNotBlocked } from '../../middlewares/blocked.middleware.js';
 import { listingService } from './listing.service.js';
+import type { RequesterContext } from './listing.service.js';
+import { subscriptionService } from '../subscriptions/subscription.service.js';
+import { PLAN_LIMITS } from '../../models/Subscription.js';
 import { userService } from '../users/user.service.js';
 import { notificationService } from '../notifications/notification.service.js';
 import { getIo } from '../../shared/socket.js';
@@ -69,6 +72,30 @@ function parseNum(val: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+/** Build a RequesterContext from the authenticated user (or default to free). */
+async function buildRequesterContext(req: AuthRequest): Promise<RequesterContext> {
+  if (!req.user) {
+    return { plan: 'free', canSeePhones: false, maxVisibleListings: PLAN_LIMITS.free.maxVisibleListings };
+  }
+  const { plan, limits } = await subscriptionService.getActivePlan(req.user.userId);
+  return {
+    userId: req.user.userId,
+    plan,
+    canSeePhones: limits.canSeePhones,
+    maxVisibleListings: limits.maxVisibleListings,
+  };
+}
+
+/** Premium-level context for admin / moderation routes. */
+function adminContext(userId: string): RequesterContext {
+  return { userId, plan: 'premium', canSeePhones: true, maxVisibleListings: Infinity };
+}
+
+/** Full-access context for own listings (no restrictions). */
+function ownListingsContext(userId: string): RequesterContext {
+  return { userId, plan: 'premium', canSeePhones: true, maxVisibleListings: Infinity };
+}
+
 router.get('/', optionalAuth, async (req: AuthRequest, res, next) => {
   try {
     const q: ListingsQuery = {
@@ -106,7 +133,8 @@ router.get('/', optionalAuth, async (req: AuthRequest, res, next) => {
       page: parseNum(req.query.page),
       limit: parseNum(req.query.limit),
     };
-    const result = await listingService.findAll(q, req.user?.userId);
+    const ctx = await buildRequesterContext(req);
+    const result = await listingService.findAll(q, ctx);
     res.json(result);
   } catch (e) {
     next(e);
@@ -131,7 +159,7 @@ router.get('/stats', authMiddleware, adminOnly, async (_req, res, next) => {
   }
 });
 
-router.get('/moderation', authMiddleware, adminOnly, async (_req, res, next) => {
+router.get('/moderation', authMiddleware, adminOnly, async (req: AuthRequest, res, next) => {
   try {
     const listings = await listingService.findPendingModeration();
     res.json(listings);
@@ -177,7 +205,8 @@ router.patch('/:id/moderate', authMiddleware, adminOnly, async (req: AuthRequest
 
 router.get('/my', authMiddleware, checkNotBlocked, async (req: AuthRequest, res, next) => {
   try {
-    const listings = await listingService.findByAuthor(req.user!.userId, req.user!.userId);
+    const ctx = ownListingsContext(req.user!.userId);
+    const listings = await listingService.findByAuthor(req.user!.userId, ctx);
     res.json(listings);
   } catch (e) {
     next(e);
@@ -188,7 +217,8 @@ router.get('/:id', optionalAuth, param('id').notEmpty(), async (req: AuthRequest
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-    const listing = await listingService.findById(req.params.id, req.user?.userId, true);
+    const ctx = await buildRequesterContext(req);
+    const listing = await listingService.findById(req.params.id, ctx, true);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
     res.json(listing);
   } catch (e) {
@@ -250,7 +280,7 @@ router.patch(
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-      const isAdmin = req.user!.role === 'admin';
+      const isAdmin = req.user!.role === 'admin' || req.user!.role === 'superadmin';
       const listing = await listingService.update(req.params.id, req.user!.userId, req.body, isAdmin);
       if (!listing) return res.status(404).json({ error: 'Not found or not owner' });
       res.json(listing);
@@ -267,7 +297,7 @@ router.delete(
   param('id').notEmpty(),
   async (req: AuthRequest, res, next) => {
     try {
-      const isAdmin = req.user!.role === 'admin';
+      const isAdmin = req.user!.role === 'admin' || req.user!.role === 'superadmin';
       const ok = await listingService.delete(req.params.id, req.user!.userId, isAdmin);
       if (!ok) return res.status(404).json({ error: 'Not found or not owner' });
       res.status(204).send();

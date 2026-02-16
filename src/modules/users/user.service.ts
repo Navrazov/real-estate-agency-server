@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { UserModel, IUser } from '../../models/User.js';
-import { listingService } from '../listings/listing.service.js';
+import { listingService, RequesterContext } from '../listings/listing.service.js';
 import { sendCallVerification, sendTelegramCode } from '../../shared/sms.js';
 
 const SALT_ROUNDS = 10;
@@ -11,6 +11,7 @@ export interface UpdateProfileBody {
   lastName?: string;
   phone?: string;
   avatar?: string;
+  phoneHidden?: boolean;
 }
 
 const CODE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
@@ -55,6 +56,7 @@ export const userService = {
     }
     if (body.phone !== undefined) update.phone = body.phone;
     if (body.avatar !== undefined) update.avatar = body.avatar;
+    if (body.phoneHidden !== undefined) update.phoneHidden = body.phoneHidden;
     return UserModel.findByIdAndUpdate(userId, update, { new: true });
   },
 
@@ -86,7 +88,7 @@ export const userService = {
     if (!user) return [];
     const favorites = user.favorites ?? [];
     const results = await Promise.all(
-      favorites.map((id) => listingService.findById(id, userId))
+      favorites.map((id) => listingService.findById(id, { userId, plan: 'premium', canSeePhones: true } as RequesterContext))
     );
     return results.filter(Boolean);
   },

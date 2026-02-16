@@ -62,6 +62,8 @@ export interface ListingsResponse {
   page: number;
   limit: number;
   totalPages: number;
+  /** Total active+approved listings matching the filter. Sent to free users so they know how many listings exist. */
+  totalActive?: number;
 }
 
 export interface ListingResponse {
@@ -95,6 +97,7 @@ export interface ListingResponse {
   moderationNote?: string;
   views: number;
   isFavorite?: boolean;
+  locked?: boolean;
   createdAt: string;
   updatedAt: string;
   // Assignment fields

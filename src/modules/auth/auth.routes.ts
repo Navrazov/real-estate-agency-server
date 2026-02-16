@@ -23,6 +23,7 @@ const registerValidation = [
   body('firstName').notEmpty().withMessage('Укажите имя').isString().trim(),
   body('lastName').notEmpty().withMessage('Укажите фамилию').isString().trim(),
   body('code').notEmpty().withMessage('Укажите код подтверждения').isString().trim(),
+  body('phoneHidden').optional().isBoolean(),
 ];
 
 const sendCodeValidation = [

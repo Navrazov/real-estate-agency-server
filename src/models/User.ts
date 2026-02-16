@@ -11,6 +11,7 @@ export interface IUser extends Document {
   passwordHash: string;
   role: Role;
   blocked: boolean;
+  phoneHidden: boolean;
   favorites: string[];
   emailVerified: boolean;
   phoneVerified: boolean;
@@ -37,6 +38,7 @@ const userSchema = new Schema<IUser>(
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ['user', 'admin', 'superadmin'], default: 'user' },
     blocked: { type: Boolean, default: false },
+    phoneHidden: { type: Boolean, default: false },
     favorites: { type: [String], default: [] },
     emailVerified: { type: Boolean, default: false },
     phoneVerified: { type: Boolean, default: false },

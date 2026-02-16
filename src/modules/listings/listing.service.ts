@@ -5,22 +5,47 @@ import type { CreateListingBody, UpdateListingBody, ListingsQuery, ListingsRespo
 import type { FilterQuery, SortOrder } from 'mongoose';
 import type { IListing } from '../../models/Listing.js';
 import type { IUser } from '../../models/User.js';
+import type { SubscriptionPlan } from '../../models/Subscription.js';
 
-// Single listing response (used for create, update, findById)
-async function toResponse(listing: IListing, userId?: string): Promise<ListingResponse> {
-  const user = await UserModel.findById(listing.authorId).lean() as Partial<IUser> | null;
-  const favUser = userId ? await UserModel.findById(userId).lean() : null;
-  const favorites = favUser?.favorites ?? [];
-  return buildResponse(listing, user, favorites);
+/** Context about the user requesting the data – drives phone / lock filtering. */
+export interface RequesterContext {
+  userId?: string;
+  plan: SubscriptionPlan;
+  canSeePhones: boolean;
+  maxVisibleListings: number;
 }
 
-// Build response from pre-loaded data (no extra DB queries)
+/** A "no restrictions" context used for admin / own-listings views. */
+const PREMIUM_CONTEXT: RequesterContext = {
+  plan: 'premium',
+  canSeePhones: true,
+  maxVisibleListings: Infinity,
+};
+
+// ---------------------------------------------------------------------------
+// Response helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a single ListingResponse from pre-loaded data.
+ *
+ * Applies:
+ * - **Phone filtering**: strip `authorPhone` when the author hid their phone
+ *   OR the requester's plan does not allow seeing phones, UNLESS the listing
+ *   belongs to the requester themselves.
+ * - **Locking**: if the listing is marked locked, strip `description` and
+ *   `authorPhone`.
+ */
 function buildResponse(
   listing: IListing,
   author: Partial<IUser> | null,
   favorites: string[] = [],
+  ctx: RequesterContext = PREMIUM_CONTEXT,
+  locked = false,
 ): ListingResponse {
-  return {
+  const isOwnListing = ctx.userId != null && listing.authorId === ctx.userId;
+
+  const response: ListingResponse = {
     id: listing._id.toString(),
     title: listing.title,
     description: listing.description,
@@ -59,12 +84,57 @@ function buildResponse(
     assignmentOriginalPrice: listing.assignmentOriginalPrice,
     completionDate: listing.completionDate?.toISOString(),
   };
+
+  // ---- Locking (free-tier restriction) ----
+  if (locked && !isOwnListing) {
+    response.locked = true;
+    response.description = '';
+    response.authorPhone = undefined;
+    return response;
+  }
+
+  // ---- Phone filtering ----
+  if (!isOwnListing) {
+    const authorHidPhone = author?.phoneHidden === true;
+    if (authorHidPhone || !ctx.canSeePhones) {
+      response.authorPhone = undefined;
+    }
+  }
+
+  return response;
 }
 
-// Batch-load authors for a list of listings (fixes N+1)
+/**
+ * Build a single response by loading the author from the DB.
+ * Used for create / update / findById where we have a single listing.
+ */
+async function toResponse(
+  listing: IListing,
+  ctx: RequesterContext = PREMIUM_CONTEXT,
+): Promise<ListingResponse> {
+  const user = await UserModel.findById(listing.authorId).lean() as Partial<IUser> | null;
+  const favUser = ctx.userId ? await UserModel.findById(ctx.userId).lean() : null;
+  const favorites = favUser?.favorites ?? [];
+
+  // For single-listing views we need to determine locking.
+  // A listing is locked when the requester has a finite maxVisibleListings limit
+  // and this listing is NOT among the N most recent active+approved listings.
+  let locked = false;
+  if (Number.isFinite(ctx.maxVisibleListings)) {
+    const recentIds = await getRecentAllowedIds(ctx.maxVisibleListings);
+    locked = !recentIds.has(listing._id.toString());
+  }
+
+  return buildResponse(listing, user, favorites, ctx, locked);
+}
+
+/**
+ * Batch-load authors for a list of listings (fixes N+1).
+ * Also resolves locking for free users.
+ */
 async function batchResponses(
   listings: IListing[],
-  userId?: string,
+  ctx: RequesterContext = PREMIUM_CONTEXT,
 ): Promise<ListingResponse[]> {
   if (listings.length === 0) return [];
 
@@ -77,13 +147,47 @@ async function batchResponses(
 
   // Load favorites for requesting user (single query)
   let favorites: string[] = [];
-  if (userId) {
-    const favUser = await UserModel.findById(userId).select('favorites').lean();
+  if (ctx.userId) {
+    const favUser = await UserModel.findById(ctx.userId).select('favorites').lean();
     favorites = favUser?.favorites ?? [];
   }
 
-  return listings.map(l => buildResponse(l, (authorMap.get(l.authorId) as Partial<IUser> | undefined) ?? null, favorites));
+  // Determine the set of allowed (unlocked) listing IDs for restricted users
+  let allowedIds: Set<string> | null = null;
+  if (Number.isFinite(ctx.maxVisibleListings)) {
+    allowedIds = await getRecentAllowedIds(ctx.maxVisibleListings);
+  }
+
+  return listings.map(l => {
+    const locked = allowedIds != null ? !allowedIds.has(l._id.toString()) : false;
+    return buildResponse(
+      l,
+      (authorMap.get(l.authorId) as Partial<IUser> | undefined) ?? null,
+      favorites,
+      ctx,
+      locked,
+    );
+  });
 }
+
+/**
+ * Returns the IDs of the N most recent active+approved listings (globally).
+ * Users with a finite maxVisibleListings limit may only see these unlocked.
+ */
+async function getRecentAllowedIds(limit: number): Promise<Set<string>> {
+  const recent = await ListingModel.find(
+    { status: 'active', moderationStatus: 'approved' },
+  )
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .select('_id')
+    .lean();
+  return new Set(recent.map(l => l._id.toString()));
+}
+
+// ---------------------------------------------------------------------------
+// Service
+// ---------------------------------------------------------------------------
 
 export const listingService = {
   async create(authorId: string, body: CreateListingBody, authorName?: string, authorPhone?: string): Promise<ListingResponse> {
@@ -125,20 +229,21 @@ export const listingService = {
       assignmentOriginalPrice: isAssignment ? body.assignmentOriginalPrice : undefined,
       completionDate: isAssignment && body.completionDate ? new Date(body.completionDate) : undefined,
     });
-    return toResponse(listing, authorId);
+    // The author always sees their own listing without restrictions
+    return toResponse(listing, { userId: authorId, plan: 'premium', canSeePhones: true, maxVisibleListings: Infinity });
   },
 
-  async findById(id: string, userId?: string, incrementViews = false): Promise<ListingResponse | undefined> {
+  async findById(id: string, ctx: RequesterContext = PREMIUM_CONTEXT, incrementViews = false): Promise<ListingResponse | undefined> {
     const listing = await ListingModel.findById(id);
     if (!listing) return undefined;
     if (incrementViews) {
       listing.views++;
       await listing.save();
     }
-    return toResponse(listing, userId);
+    return toResponse(listing, ctx);
   },
 
-  async findAll(query: ListingsQuery = {}, userId?: string): Promise<ListingsResponse> {
+  async findAll(query: ListingsQuery = {}, ctx: RequesterContext = PREMIUM_CONTEXT): Promise<ListingsResponse> {
     const filter: FilterQuery<IListing> = {};
 
     if (query.search) {
@@ -193,21 +298,33 @@ export const listingService = {
     else if (sortBy === 'views') sort = { views: dir };
     else sort = { createdAt: dir };
 
+    // Total listings matching the filter (before free-user restriction)
+    const totalActive = await ListingModel.countDocuments(filter);
+
+    // Users with a finite visibility limit: only return the N most recent allowed listings
+    if (Number.isFinite(ctx.maxVisibleListings)) {
+      const allowedIds = await getRecentAllowedIds(ctx.maxVisibleListings);
+      const limitedFilter = { ...filter, _id: { $in: [...allowedIds] } };
+      const listings = await ListingModel.find(limitedFilter).sort(sort).lean();
+      const items = await batchResponses(listings as unknown as IListing[], ctx);
+      return { items, total: items.length, page: 1, limit: items.length, totalPages: 1, totalActive };
+    }
+
+    // Paid users: normal pagination
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 20));
-    const total = await ListingModel.countDocuments(filter);
-    const totalPages = Math.ceil(total / limit);
+    const totalPages = Math.ceil(totalActive / limit);
     const offset = (page - 1) * limit;
 
     const listings = await ListingModel.find(filter).sort(sort).skip(offset).limit(limit).lean();
-    const items = await batchResponses(listings as unknown as IListing[], userId);
+    const items = await batchResponses(listings as unknown as IListing[], ctx);
 
-    return { items, total, page, limit, totalPages };
+    return { items, total: totalActive, page, limit, totalPages };
   },
 
-  async findByAuthor(authorId: string, userId?: string): Promise<ListingResponse[]> {
+  async findByAuthor(authorId: string, ctx: RequesterContext = PREMIUM_CONTEXT): Promise<ListingResponse[]> {
     const listings = await ListingModel.find({ authorId }).sort({ createdAt: -1 }).lean();
-    return batchResponses(listings as unknown as IListing[], userId);
+    return batchResponses(listings as unknown as IListing[], ctx);
   },
 
   async findActiveByAuthor(authorId: string) {
@@ -229,7 +346,7 @@ export const listingService = {
 
   async findPendingModeration(): Promise<ListingResponse[]> {
     const listings = await ListingModel.find({ moderationStatus: 'pending' }).sort({ createdAt: 1 }).lean();
-    return batchResponses(listings as unknown as IListing[]);
+    return batchResponses(listings as unknown as IListing[], PREMIUM_CONTEXT);
   },
 
   async moderate(id: string, adminId: string, action: 'approve' | 'reject', note?: string): Promise<ListingResponse | null> {
@@ -246,7 +363,7 @@ export const listingService = {
     }
 
     await listing.save();
-    return toResponse(listing);
+    return toResponse(listing, PREMIUM_CONTEXT);
   },
 
   async update(id: string, authorId: string, body: UpdateListingBody, isAdmin?: boolean): Promise<ListingResponse | null> {
@@ -312,7 +429,8 @@ export const listingService = {
     }
 
     await listing.save();
-    return toResponse(listing, authorId);
+    // The author/admin always sees the full listing after update
+    return toResponse(listing, { userId: authorId, plan: 'premium', canSeePhones: true, maxVisibleListings: Infinity });
   },
 
   async delete(id: string, authorId: string, isAdmin?: boolean): Promise<boolean> {

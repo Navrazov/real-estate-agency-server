@@ -103,7 +103,7 @@ export const authService = {
   },
 
   async register(body: RegisterBody): Promise<AuthResponse> {
-    const { phone, password, firstName, lastName, code } = body;
+    const { phone, password, firstName, lastName, code, phoneHidden } = body;
 
     const storedEntry = smsCodeStore.get(phone);
     if (!storedEntry || storedEntry.expiresAt <= Date.now()) {
@@ -131,6 +131,7 @@ export const authService = {
       passwordHash,
       role,
       phoneVerified: true,
+      phoneHidden: phoneHidden === true,
     });
 
     const token = createToken(user);
@@ -144,6 +145,7 @@ export const authService = {
         lastName: user.lastName,
         role: user.role,
         phoneVerified: user.phoneVerified,
+        phoneHidden: user.phoneHidden,
       },
     };
   },
@@ -170,6 +172,7 @@ export const authService = {
         lastName: user.lastName,
         role: user.role,
         phoneVerified: user.phoneVerified,
+        phoneHidden: user.phoneHidden,
       },
     };
   },
