@@ -1,7 +1,7 @@
 import { UserModel, IUser } from '../../models/User.js';
 import { listingService } from '../listings/listing.service.js';
 import { sendEmailVerificationCode } from '../../shared/email.js';
-import { sendSmsCode } from '../../shared/sms.js';
+import { sendCallVerification } from '../../shared/sms.js';
 
 export interface UpdateProfileBody {
   name?: string;
@@ -134,12 +134,11 @@ export const userService = {
   // ── Phone verification code ──
 
   async sendPhoneCode(userId: string, phone: string): Promise<{ success: true }> {
-    const code = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit
+    const code = await sendCallVerification(phone);
     const expiresAt = Date.now() + CODE_EXPIRY_MS;
 
     phoneCodeStore.set(`${userId}:${phone}`, { code, expiresAt });
 
-    await sendSmsCode(phone, code);
     return { success: true };
   },
 

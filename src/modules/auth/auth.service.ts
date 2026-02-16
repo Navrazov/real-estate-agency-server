@@ -5,13 +5,17 @@ import { ROLES } from '../../config/constants.js';
 import { UserModel, IUser } from '../../models/User.js';
 import type { JwtPayload } from '../../middlewares/auth.middleware.js';
 import type { LoginBody, RegisterBody, SendCodeBody, AuthResponse } from './auth.types.js';
-import { sendSmsCode } from '../../shared/sms.js';
+import { sendCallVerification, sendTelegramCode } from '../../shared/sms.js';
 
 const SALT_ROUNDS = 10;
 const CODE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+const COOLDOWN_MS = 60 * 1000; // 1 minute between requests per phone
 
 // In-memory SMS code store: phone -> { code, expiresAt }
 const smsCodeStore = new Map<string, { code: string; expiresAt: number }>();
+
+// Per-phone rate limit: phone -> last request timestamp
+const phoneCooldownStore = new Map<string, number>();
 
 // Periodically clean expired codes every 5 minutes
 setInterval(() => {
@@ -19,6 +23,12 @@ setInterval(() => {
   for (const [phone, entry] of smsCodeStore) {
     if (entry.expiresAt <= now) {
       smsCodeStore.delete(phone);
+    }
+  }
+  // Clean old cooldowns too
+  for (const [phone, ts] of phoneCooldownStore) {
+    if (now - ts > COOLDOWN_MS) {
+      phoneCooldownStore.delete(phone);
     }
   }
 }, CODE_EXPIRY_MS);
@@ -38,19 +48,40 @@ function isPhoneInput(input: string): boolean {
 }
 
 export const authService = {
-  async sendCode(body: SendCodeBody): Promise<{ success: true }> {
-    const { phone } = body;
+  async sendCode(body: SendCodeBody): Promise<{ success: true; method: string }> {
+    const { phone, method = 'call' } = body;
 
-    // Generate random 6-digit code
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    // Per-phone cooldown check (1 minute)
+    const lastRequest = phoneCooldownStore.get(phone);
+    if (lastRequest) {
+      const elapsed = Date.now() - lastRequest;
+      if (elapsed < COOLDOWN_MS) {
+        const remaining = Math.ceil((COOLDOWN_MS - elapsed) / 1000);
+        throw Object.assign(
+          new Error(`Подождите ${remaining} сек. перед повторным запросом`),
+          { statusCode: 429 }
+        );
+      }
+    }
+
+    // Record this request time
+    phoneCooldownStore.set(phone, Date.now());
+
+    let code: string;
+
+    if (method === 'telegram') {
+      // Generate 4-digit code and send via Telegram
+      code = String(Math.floor(1000 + Math.random() * 9000));
+      await sendTelegramCode(phone, code);
+    } else {
+      // Call verification: GreenSMS returns the 4-digit code (last 4 of caller ID)
+      code = await sendCallVerification(phone);
+    }
+
     const expiresAt = Date.now() + CODE_EXPIRY_MS;
-
     smsCodeStore.set(phone, { code, expiresAt });
 
-    // Send SMS via greenSMS (falls back to console log if not configured)
-    await sendSmsCode(phone, code);
-
-    return { success: true };
+    return { success: true, method };
   },
 
   async verifyCode(phone: string, code: string): Promise<{ valid: true }> {

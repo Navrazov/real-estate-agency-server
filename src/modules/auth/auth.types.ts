@@ -14,6 +14,7 @@ export interface RegisterBody {
 
 export interface SendCodeBody {
   phone: string;
+  method?: 'call' | 'telegram';
 }
 
 export interface AuthResponse {

@@ -37,6 +37,9 @@ const sendCodeValidation = [
     .isString()
     .trim()
     .matches(/^\+?\d{7,15}$/).withMessage('Invalid phone format'),
+  body('method')
+    .optional()
+    .isIn(['call', 'telegram']).withMessage('Method must be "call" or "telegram"'),
 ];
 
 router.post(
