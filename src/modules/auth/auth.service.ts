@@ -4,7 +4,7 @@ import { env } from '../../config/env.js';
 import { ROLES } from '../../config/constants.js';
 import { UserModel, IUser } from '../../models/User.js';
 import type { JwtPayload } from '../../middlewares/auth.middleware.js';
-import type { LoginBody, RegisterBody, SendCodeBody, AuthResponse } from './auth.types.js';
+import type { LoginBody, RegisterBody, SendCodeBody, ResetPasswordBody, AuthResponse } from './auth.types.js';
 import { sendCallVerification, sendTelegramCode } from '../../shared/sms.js';
 
 const SALT_ROUNDS = 10;
@@ -42,13 +42,21 @@ function createToken(user: IUser): string {
 
 export const authService = {
   async sendCode(body: SendCodeBody): Promise<{ success: true; method: string }> {
-    const { phone, method = 'call', checkExists = false } = body;
+    const { phone, method = 'call', checkExists = false, mustExist = false } = body;
 
     // If checkExists flag is set, verify phone is not already registered
     if (checkExists) {
       const existingUser = await UserModel.findOne({ phone });
       if (existingUser) {
         throw Object.assign(new Error('Этот номер уже зарегистрирован'), { statusCode: 400 });
+      }
+    }
+
+    // If mustExist flag is set, verify phone is registered
+    if (mustExist) {
+      const existingUser = await UserModel.findOne({ phone });
+      if (!existingUser) {
+        throw Object.assign(new Error('Аккаунт с этим номером не найден'), { statusCode: 404 });
       }
     }
 
@@ -118,6 +126,8 @@ export const authService = {
     const user = await UserModel.create({
       phone,
       name,
+      firstName,
+      lastName,
       passwordHash,
       role,
       phoneVerified: true,
@@ -130,6 +140,8 @@ export const authService = {
         id: user._id.toString(),
         phone: user.phone,
         name: user.name,
+        firstName: user.firstName,
+        lastName: user.lastName,
         role: user.role,
         phoneVerified: user.phoneVerified,
       },
@@ -154,9 +166,34 @@ export const authService = {
         id: user._id.toString(),
         phone: user.phone,
         name: user.name,
+        firstName: user.firstName,
+        lastName: user.lastName,
         role: user.role,
         phoneVerified: user.phoneVerified,
       },
     };
+  },
+
+  async resetPassword(body: ResetPasswordBody): Promise<{ success: true }> {
+    const { phone, code, newPassword } = body;
+
+    const storedEntry = smsCodeStore.get(phone);
+    if (!storedEntry || storedEntry.expiresAt <= Date.now()) {
+      smsCodeStore.delete(phone);
+      throw Object.assign(new Error('Код не найден или истёк. Запросите новый код.'), { statusCode: 400 });
+    }
+    if (storedEntry.code !== code) {
+      throw Object.assign(new Error('Неверный код подтверждения'), { statusCode: 400 });
+    }
+
+    smsCodeStore.delete(phone);
+
+    const user = await UserModel.findOne({ phone });
+    if (!user) throw Object.assign(new Error('Пользователь не найден'), { statusCode: 404 });
+
+    user.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await user.save();
+
+    return { success: true };
   },
 };

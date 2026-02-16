@@ -4,6 +4,8 @@ import type { Role } from '../config/constants.js';
 export interface IUser extends Document {
   email?: string;
   name?: string;
+  firstName?: string;
+  lastName?: string;
   phone?: string;
   avatar?: string;
   passwordHash: string;
@@ -28,6 +30,8 @@ const userSchema = new Schema<IUser>(
   {
     email: { type: String, unique: true, sparse: true, lowercase: true },
     name: { type: String },
+    firstName: { type: String },
+    lastName: { type: String },
     phone: { type: String, unique: true, sparse: true },
     avatar: { type: String },
     passwordHash: { type: String, required: true },

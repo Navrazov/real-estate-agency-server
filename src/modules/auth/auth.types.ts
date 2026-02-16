@@ -15,6 +15,13 @@ export interface SendCodeBody {
   phone: string;
   method?: 'call' | 'telegram';
   checkExists?: boolean;
+  mustExist?: boolean;
+}
+
+export interface ResetPasswordBody {
+  phone: string;
+  code: string;
+  newPassword: string;
 }
 
 export interface AuthResponse {
@@ -23,6 +30,8 @@ export interface AuthResponse {
     id: string;
     phone?: string;
     name?: string;
+    firstName?: string;
+    lastName?: string;
     role: string;
     phoneVerified: boolean;
   };

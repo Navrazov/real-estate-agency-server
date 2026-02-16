@@ -1,9 +1,14 @@
+import bcrypt from 'bcryptjs';
 import { UserModel, IUser } from '../../models/User.js';
 import { listingService } from '../listings/listing.service.js';
-import { sendCallVerification } from '../../shared/sms.js';
+import { sendCallVerification, sendTelegramCode } from '../../shared/sms.js';
+
+const SALT_ROUNDS = 10;
 
 export interface UpdateProfileBody {
   name?: string;
+  firstName?: string;
+  lastName?: string;
   phone?: string;
   avatar?: string;
 }
@@ -36,7 +41,18 @@ export const userService = {
 
   async updateProfile(userId: string, body: UpdateProfileBody): Promise<IUser | null> {
     const update: Record<string, unknown> = {};
-    if (body.name !== undefined) update.name = body.name;
+    if (body.firstName !== undefined || body.lastName !== undefined) {
+      // If either name part is provided, update both parts and the computed name
+      const user = await UserModel.findById(userId);
+      if (!user) return null;
+      const fn = body.firstName !== undefined ? body.firstName : (user.firstName || '');
+      const ln = body.lastName !== undefined ? body.lastName : (user.lastName || '');
+      update.firstName = fn;
+      update.lastName = ln;
+      update.name = [fn, ln].filter(Boolean).join(' ');
+    } else if (body.name !== undefined) {
+      update.name = body.name;
+    }
     if (body.phone !== undefined) update.phone = body.phone;
     if (body.avatar !== undefined) update.avatar = body.avatar;
     return UserModel.findByIdAndUpdate(userId, update, { new: true });
@@ -86,11 +102,30 @@ export const userService = {
 
   // ── Phone verification code ──
 
-  async sendPhoneCode(userId: string, phone: string): Promise<{ success: true }> {
-    const code = await sendCallVerification(phone);
+  async sendPhoneCode(userId: string, phone: string, method: 'call' | 'telegram' = 'call'): Promise<{ success: true; method: string }> {
+    let code: string;
+    if (method === 'telegram') {
+      code = String(Math.floor(1000 + Math.random() * 9000));
+      await sendTelegramCode(phone, code);
+    } else {
+      code = await sendCallVerification(phone);
+    }
     const expiresAt = Date.now() + CODE_EXPIRY_MS;
 
     phoneCodeStore.set(`${userId}:${phone}`, { code, expiresAt });
+
+    return { success: true, method };
+  },
+
+  async changePassword(userId: string, oldPassword: string, newPassword: string): Promise<{ success: true }> {
+    const user = await UserModel.findById(userId);
+    if (!user) throw Object.assign(new Error('Пользователь не найден'), { statusCode: 404 });
+
+    const valid = await bcrypt.compare(oldPassword, user.passwordHash);
+    if (!valid) throw Object.assign(new Error('Неверный текущий пароль'), { statusCode: 400 });
+
+    user.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await user.save();
 
     return { success: true };
   },

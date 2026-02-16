@@ -40,6 +40,8 @@ router.get('/me', async (req: AuthRequest, res, next) => {
     res.json({
       id: user._id.toString(),
       name: user.name,
+      firstName: user.firstName,
+      lastName: user.lastName,
       phone: user.phone,
       avatar: user.avatar,
       role: user.role,
@@ -79,6 +81,9 @@ router.post(
       .isString()
       .trim()
       .matches(/^\+?\d{7,15}$/).withMessage('Неверный формат номера'),
+    body('method')
+      .optional()
+      .isIn(['call', 'telegram']).withMessage('Метод должен быть "call" или "telegram"'),
   ],
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
@@ -86,7 +91,7 @@ router.post(
       if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
       }
-      const result = await userService.sendPhoneCode(req.user!.userId, req.body.phone);
+      const result = await userService.sendPhoneCode(req.user!.userId, req.body.phone, req.body.method);
       res.json(result);
     } catch (e) {
       next(e);
@@ -119,6 +124,30 @@ router.post(
         role: user.role,
         phoneVerified: user.phoneVerified,
       });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+// ── Password management ──
+
+router.post(
+  '/me/change-password',
+  [
+    body('oldPassword').notEmpty().withMessage('Укажите текущий пароль'),
+    body('newPassword')
+      .notEmpty().withMessage('Укажите новый пароль')
+      .isLength({ min: 6 }).withMessage('Пароль должен быть не менее 6 символов'),
+  ],
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+      const result = await userService.changePassword(req.user!.userId, req.body.oldPassword, req.body.newPassword);
+      res.json(result);
     } catch (e) {
       next(e);
     }

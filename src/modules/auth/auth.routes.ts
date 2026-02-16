@@ -37,6 +37,9 @@ const sendCodeValidation = [
   body('checkExists')
     .optional()
     .isBoolean(),
+  body('mustExist')
+    .optional()
+    .isBoolean(),
 ];
 
 router.post(
@@ -111,6 +114,34 @@ router.post(
         return res.status(400).json({ errors: errors.array() });
       }
       const result = await authService.login(req.body);
+      res.json(result);
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.post(
+  '/reset-password',
+  authLimiter,
+  [
+    body('phone')
+      .notEmpty().withMessage('Укажите номер телефона')
+      .isString()
+      .trim()
+      .matches(/^\+?\d{7,15}$/).withMessage('Неверный формат номера'),
+    body('code').notEmpty().withMessage('Укажите код').isString().trim(),
+    body('newPassword')
+      .notEmpty().withMessage('Укажите новый пароль')
+      .isLength({ min: 6 }).withMessage('Пароль должен быть не менее 6 символов'),
+  ],
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+      const result = await authService.resetPassword(req.body);
       res.json(result);
     } catch (e) {
       next(e);
