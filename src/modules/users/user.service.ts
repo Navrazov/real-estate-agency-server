@@ -31,7 +31,7 @@ export const userService = {
   },
 
   async findAdmins(): Promise<IUser[]> {
-    return UserModel.find({ role: 'admin' });
+    return UserModel.find({ role: { $in: ['admin', 'superadmin'] } });
   },
 
   async updateProfile(userId: string, body: UpdateProfileBody): Promise<IUser | null> {
@@ -78,7 +78,7 @@ export const userService = {
   async getStats() {
     const total = await UserModel.countDocuments();
     const blocked = await UserModel.countDocuments({ blocked: true });
-    const admins = await UserModel.countDocuments({ role: 'admin' });
+    const admins = await UserModel.countDocuments({ role: { $in: ['admin', 'superadmin'] } });
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const recent = await UserModel.countDocuments({ createdAt: { $gte: weekAgo } });
     return { total, blocked, admins, recentWeek: recent };

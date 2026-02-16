@@ -40,4 +40,5 @@ export function requireRole(...roles: Role[]) {
   };
 }
 
-export const adminOnly = requireRole(ROLES.ADMIN);
+export const adminOnly = requireRole(ROLES.ADMIN, ROLES.SUPERADMIN);
+export const superadminOnly = requireRole(ROLES.SUPERADMIN);

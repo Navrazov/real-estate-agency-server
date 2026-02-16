@@ -31,7 +31,7 @@ const userSchema = new Schema<IUser>(
     phone: { type: String, unique: true, sparse: true },
     avatar: { type: String },
     passwordHash: { type: String, required: true },
-    role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    role: { type: String, enum: ['user', 'admin', 'superadmin'], default: 'user' },
     blocked: { type: Boolean, default: false },
     favorites: { type: [String], default: [] },
     emailVerified: { type: Boolean, default: false },

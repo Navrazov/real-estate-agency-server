@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
 import { body, param, validationResult } from 'express-validator';
-import { authMiddleware, adminOnly, AuthRequest } from '../../middlewares/auth.middleware.js';
+import { authMiddleware, adminOnly, superadminOnly, AuthRequest } from '../../middlewares/auth.middleware.js';
 import { checkNotBlocked } from '../../middlewares/blocked.middleware.js';
 import { userService } from './user.service.js';
 
@@ -169,7 +169,7 @@ router.get('/stats', authMiddleware, adminOnly, async (_req, res, next) => {
   }
 });
 
-router.patch('/:id/role', authMiddleware, adminOnly, async (req, res, next) => {
+router.patch('/:id/role', authMiddleware, superadminOnly, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { role } = req.body;
