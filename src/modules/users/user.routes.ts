@@ -175,6 +175,31 @@ router.post('/favorites/:listingId', param('listingId').notEmpty(), async (req: 
   }
 });
 
+// ── Account deletion ──
+
+router.delete('/me/account', async (req: AuthRequest, res, next) => {
+  try {
+    await userService.deleteAccount(req.user!.userId);
+    res.json({ success: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.delete('/:id', authMiddleware, adminOnly, async (req: AuthRequest, res, next) => {
+  try {
+    const target = await userService.findById(req.params.id);
+    if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+    if (target.role === 'admin' || target.role === 'superadmin') {
+      return res.status(403).json({ error: 'Нельзя удалить администратора' });
+    }
+    await userService.deleteAccount(req.params.id);
+    res.json({ success: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get('/', authMiddleware, adminOnly, async (_req, res, next) => {
   try {
     const users = (await userService.findAll()).map((u) => ({

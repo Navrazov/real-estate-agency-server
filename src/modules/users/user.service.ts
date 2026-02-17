@@ -1,5 +1,12 @@
 import bcrypt from 'bcryptjs';
 import { UserModel, IUser } from '../../models/User.js';
+import { ListingModel } from '../../models/Listing.js';
+import { SubscriptionModel } from '../../models/Subscription.js';
+import { NoteModel } from '../../models/Note.js';
+import { NotificationModel } from '../../models/Notification.js';
+import { MessageModel } from '../../models/Message.js';
+import { ConversationModel } from '../../models/Conversation.js';
+import { AnalyticsEventModel } from '../../models/AnalyticsEvent.js';
 import { listingService, RequesterContext } from '../listings/listing.service.js';
 import { sendCallVerification, sendTelegramCode } from '../../shared/sms.js';
 
@@ -158,5 +165,23 @@ export const userService = {
     );
     if (!user) throw Object.assign(new Error('Пользователь не найден'), { statusCode: 404 });
     return user;
+  },
+
+  async deleteAccount(userId: string): Promise<void> {
+    const user = await UserModel.findById(userId);
+    if (!user) throw Object.assign(new Error('Пользователь не найден'), { statusCode: 404 });
+
+    await ListingModel.deleteMany({ authorId: userId });
+    await SubscriptionModel.deleteMany({ userId });
+    await NoteModel.deleteMany({ userId });
+    await NotificationModel.deleteMany({ userId });
+    await MessageModel.deleteMany({ senderId: userId });
+    await ConversationModel.updateMany(
+      { participants: userId },
+      { $pull: { participants: userId } },
+    );
+    await ConversationModel.deleteMany({ participants: { $size: 0 } });
+    await AnalyticsEventModel.deleteMany({ userId });
+    await UserModel.findByIdAndDelete(userId);
   },
 };
