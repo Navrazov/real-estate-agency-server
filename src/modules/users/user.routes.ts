@@ -20,11 +20,22 @@ router.get('/profile/:id', async (req, res, next) => {
       name: user.name,
       phone: user.phoneHidden ? undefined : user.phone,
       avatar: user.avatar,
+      birthDate: user.birthDate?.toISOString() ?? null,
       createdAt: user.createdAt,
       lastSeen: user.lastSeen,
       online: checkOnline(req.params.id),
       listings,
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Public agents list
+router.get('/agents', async (_req, res, next) => {
+  try {
+    const agents = await userService.findAgents();
+    res.json(agents);
   } catch (e) {
     next(e);
   }
@@ -49,6 +60,7 @@ router.get('/me', async (req: AuthRequest, res, next) => {
       phoneHidden: user.phoneHidden ?? false,
       favorites: user.favorites ?? [],
       phoneVerified: user.phoneVerified,
+      birthDate: user.birthDate?.toISOString() ?? null,
       createdAt: user.createdAt,
     });
   } catch (e) {
@@ -67,6 +79,7 @@ router.patch('/me', async (req: AuthRequest, res, next) => {
       avatar: user.avatar,
       role: user.role,
       phoneHidden: user.phoneHidden ?? false,
+      birthDate: user.birthDate?.toISOString() ?? null,
     });
   } catch (e) {
     next(e);

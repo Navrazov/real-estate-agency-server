@@ -54,6 +54,12 @@ export async function sendTelegramCode(phone: string, code: string): Promise<voi
   if (!env.greensmsApiKey) {
     logger.warn(`[TG] greenSMS not configured. Telegram code for ${phone}: ${code}`);
     console.log(`[TG] Telegram code for ${phone}: ${code}`);
+    if (env.nodeEnv === 'production') {
+      throw Object.assign(
+        new Error('Отправка кода через Telegram временно недоступна. Попробуйте способ «Звонок».'),
+        { statusCode: 503 },
+      );
+    }
     return;
   }
 

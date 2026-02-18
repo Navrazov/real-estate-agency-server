@@ -10,6 +10,7 @@ export interface RegisterBody {
   lastName: string;
   code: string;
   phoneHidden?: boolean;
+  birthDate?: string;
 }
 
 export interface SendCodeBody {

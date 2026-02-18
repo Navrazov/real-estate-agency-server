@@ -150,4 +150,52 @@ router.post(
   }
 );
 
+// ── Telegram auth ──
+
+router.post('/telegram/init', authLimiter, (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = authService.telegramInit();
+    res.json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post(
+  '/telegram/webhook',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // Handle Telegram bot webhook update
+      const update = req.body;
+      const message = update?.message;
+      if (!message?.text?.startsWith('/start ')) {
+        return res.json({ ok: true });
+      }
+      const nonce = message.text.slice(7).trim();
+      const from = message.from;
+      if (!from?.id || !nonce) {
+        return res.json({ ok: true });
+      }
+      await authService.telegramCallback(
+        String(from.id),
+        from.first_name || '',
+        from.last_name || '',
+        nonce,
+      );
+      res.json({ ok: true });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.get('/telegram/check/:nonce', authLimiter, (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = authService.telegramCheck(req.params.nonce);
+    res.json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
 export const authRoutes = router;

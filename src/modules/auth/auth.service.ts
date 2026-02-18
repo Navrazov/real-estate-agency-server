@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { env } from '../../config/env.js';
 import { ROLES } from '../../config/constants.js';
@@ -10,9 +11,13 @@ import { sendCallVerification, sendTelegramCode } from '../../shared/sms.js';
 const SALT_ROUNDS = 10;
 const CODE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 const COOLDOWN_MS = 60 * 1000; // 1 minute between requests per phone
+const TELEGRAM_NONCE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 
 // In-memory SMS code store: phone -> { code, expiresAt }
 const smsCodeStore = new Map<string, { code: string; expiresAt: number }>();
+
+// In-memory Telegram nonce store: nonce -> { result, expiresAt }
+const telegramNonceStore = new Map<string, { result?: AuthResponse; expiresAt: number }>();
 
 // Per-phone rate limit: phone -> last request timestamp
 const phoneCooldownStore = new Map<string, number>();
@@ -28,6 +33,11 @@ setInterval(() => {
   for (const [phone, ts] of phoneCooldownStore) {
     if (now - ts > COOLDOWN_MS) {
       phoneCooldownStore.delete(phone);
+    }
+  }
+  for (const [nonce, entry] of telegramNonceStore) {
+    if (entry.expiresAt <= now) {
+      telegramNonceStore.delete(nonce);
     }
   }
 }, CODE_EXPIRY_MS);
@@ -103,7 +113,7 @@ export const authService = {
   },
 
   async register(body: RegisterBody): Promise<AuthResponse> {
-    const { phone, password, firstName, lastName, code, phoneHidden } = body;
+    const { phone, password, firstName, lastName, code, phoneHidden, birthDate } = body;
 
     const storedEntry = smsCodeStore.get(phone);
     if (!storedEntry || storedEntry.expiresAt <= Date.now()) {
@@ -132,6 +142,7 @@ export const authService = {
       role,
       phoneVerified: true,
       phoneHidden: phoneHidden === true,
+      ...(birthDate ? { birthDate: new Date(birthDate) } : {}),
     });
 
     const token = createToken(user);
@@ -198,5 +209,75 @@ export const authService = {
     await user.save();
 
     return { success: true };
+  },
+
+  // ── Telegram auth flow ──
+
+  /** Generate a nonce and return the Telegram bot deep link */
+  telegramInit(): { nonce: string; botUrl: string } {
+    if (!env.telegramBotUsername) {
+      throw Object.assign(new Error('Вход через Telegram временно недоступен. Попробуйте другой способ.'), { statusCode: 503 });
+    }
+    const nonce = crypto.randomBytes(16).toString('hex');
+    telegramNonceStore.set(nonce, { expiresAt: Date.now() + TELEGRAM_NONCE_EXPIRY_MS });
+    const botUrl = `https://t.me/${env.telegramBotUsername}?start=${nonce}`;
+    return { nonce, botUrl };
+  },
+
+  /** Called by the Telegram bot webhook when user sends /start <nonce> */
+  async telegramCallback(telegramId: string, firstName: string, lastName: string, nonce: string): Promise<void> {
+    const entry = telegramNonceStore.get(nonce);
+    if (!entry || entry.expiresAt <= Date.now()) {
+      telegramNonceStore.delete(nonce);
+      return; // silently ignore expired nonces
+    }
+
+    // Find or create user by telegramId
+    let user = await UserModel.findOne({ telegramId });
+    if (!user) {
+      const name = [firstName, lastName].filter(Boolean).join(' ');
+      const randomPass = crypto.randomBytes(16).toString('hex');
+      const passwordHash = await bcrypt.hash(randomPass, SALT_ROUNDS);
+      user = await UserModel.create({
+        telegramId,
+        name,
+        firstName,
+        lastName,
+        passwordHash,
+        role: ROLES.USER,
+      });
+    }
+
+    if (user.blocked) return;
+
+    const token = createToken(user);
+    entry.result = {
+      token,
+      user: {
+        id: user._id.toString(),
+        phone: user.phone,
+        name: user.name,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        phoneVerified: user.phoneVerified,
+        phoneHidden: user.phoneHidden,
+      },
+    };
+  },
+
+  /** Poll for Telegram auth result */
+  telegramCheck(nonce: string): { status: 'pending' | 'done'; result?: AuthResponse } {
+    const entry = telegramNonceStore.get(nonce);
+    if (!entry || entry.expiresAt <= Date.now()) {
+      telegramNonceStore.delete(nonce);
+      throw Object.assign(new Error('Сессия истекла'), { statusCode: 400 });
+    }
+    if (entry.result) {
+      const result = entry.result;
+      telegramNonceStore.delete(nonce);
+      return { status: 'done', result };
+    }
+    return { status: 'pending' };
   },
 };

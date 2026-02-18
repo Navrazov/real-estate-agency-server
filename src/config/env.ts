@@ -20,4 +20,6 @@ export const env = {
   appUrl: process.env.APP_URL || 'http://localhost:5173',
   uploadsBaseUrl: process.env.UPLOADS_BASE_URL || '',
   greensmsApiKey: process.env.GREENSMS_API_KEY || '',
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
+  telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || '',
 } as const;

@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import mongoose from 'mongoose';
 import { UserModel, IUser } from '../../models/User.js';
 import { ListingModel } from '../../models/Listing.js';
 import { SubscriptionModel } from '../../models/Subscription.js';
@@ -19,6 +20,7 @@ export interface UpdateProfileBody {
   phone?: string;
   avatar?: string;
   phoneHidden?: boolean;
+  birthDate?: string | null;
 }
 
 const CODE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
@@ -64,6 +66,9 @@ export const userService = {
     if (body.phone !== undefined) update.phone = body.phone;
     if (body.avatar !== undefined) update.avatar = body.avatar;
     if (body.phoneHidden !== undefined) update.phoneHidden = body.phoneHidden;
+    if (body.birthDate !== undefined) {
+      update.birthDate = body.birthDate ? new Date(body.birthDate) : null;
+    }
     return UserModel.findByIdAndUpdate(userId, update, { new: true });
   },
 
@@ -98,6 +103,48 @@ export const userService = {
       favorites.map((id) => listingService.findById(id, { userId, plan: 'premium', canSeePhones: true } as RequesterContext))
     );
     return results.filter(Boolean);
+  },
+
+  async findAgents(): Promise<Array<{
+    id: string;
+    name?: string;
+    avatar?: string;
+    phone?: string;
+    agency?: string;
+    activeListings: number;
+    createdAt: Date;
+    lastSeen?: Date;
+    online: boolean;
+  }>> {
+    // Find users who have at least one active listing
+    const activeListings = await ListingModel.aggregate([
+      { $match: { status: 'active' } },
+      { $group: { _id: '$authorId', count: { $sum: 1 } } },
+    ]);
+    const authorIds = activeListings
+      .map((a) => String(a._id))
+      .filter((id) => mongoose.Types.ObjectId.isValid(id));
+    if (authorIds.length === 0) return [];
+
+    const objectIds = authorIds.map((id) => new mongoose.Types.ObjectId(id));
+    const users = await UserModel.find({ _id: { $in: objectIds }, blocked: false })
+      .select('name avatar phone phoneHidden agency createdAt lastSeen')
+      .lean();
+
+    const { isOnline } = await import('../chat/online.js');
+    const countMap = new Map(activeListings.map((a) => [a._id.toString(), a.count as number]));
+
+    return users.map((u) => ({
+      id: u._id.toString(),
+      name: u.name,
+      avatar: u.avatar,
+      phone: u.phoneHidden ? undefined : u.phone,
+      agency: u.agency,
+      activeListings: countMap.get(u._id.toString()) ?? 0,
+      createdAt: u.createdAt,
+      lastSeen: u.lastSeen,
+      online: isOnline(u._id.toString()),
+    }));
   },
 
   async getStats() {
