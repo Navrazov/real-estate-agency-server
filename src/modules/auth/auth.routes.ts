@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { body, validationResult } from 'express-validator';
 import { authService } from './auth.service.js';
 import { authLimiter } from '../../middlewares/rate-limit.middleware.js';
+import { sendMessage, requestContact, removeKeyboard } from '../../shared/telegram.js';
 
 const router = Router();
 
@@ -165,23 +166,64 @@ router.post(
   '/telegram/webhook',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // Handle Telegram bot webhook update
       const update = req.body;
       const message = update?.message;
-      if (!message?.text?.startsWith('/start ')) {
-        return res.json({ ok: true });
-      }
-      const nonce = message.text.slice(7).trim();
+      if (!message) return res.json({ ok: true });
+
+      const chatId = message.chat?.id;
       const from = message.from;
-      if (!from?.id || !nonce) {
+      if (!chatId || !from?.id) return res.json({ ok: true });
+
+      // Handle /start <nonce> — auth flow
+      if (message.text?.startsWith('/start ')) {
+        const nonce = message.text.slice(7).trim();
+        if (!nonce) return res.json({ ok: true });
+
+        const result = await authService.telegramCallback(
+          String(from.id),
+          from.first_name || '',
+          from.last_name || '',
+          from.username,
+          nonce,
+        );
+
+        if (result) {
+          const name = from.first_name || 'друг';
+          await sendMessage(chatId,
+            `\u2705 <b>${name}, вы успешно авторизованы!</b>\n\nВернитесь в приложение — вход выполнен.`
+          );
+
+          if (result.isNew) {
+            await requestContact(chatId,
+              '\uD83D\uDCF2 Поделитесь номером телефона, чтобы другие пользователи могли с вами связаться.\n\nНажмите кнопку ниже:'
+            );
+          }
+        } else {
+          await sendMessage(chatId, '\u274C Сессия истекла. Попробуйте войти заново через приложение.');
+        }
+
         return res.json({ ok: true });
       }
-      await authService.telegramCallback(
-        String(from.id),
-        from.first_name || '',
-        from.last_name || '',
-        nonce,
+
+      // Handle contact sharing — save phone
+      if (message.contact) {
+        const phone = message.contact.phone_number;
+        if (phone) {
+          await authService.telegramSavePhone(String(from.id), phone);
+          await removeKeyboard(chatId,
+            `\u2705 Номер <b>${phone}</b> сохранён в вашем профиле!\n\n` +
+            'Теперь покупатели смогут связаться с вами напрямую.'
+          );
+        }
+        return res.json({ ok: true });
+      }
+
+      // Handle any other message
+      await sendMessage(chatId,
+        '\uD83C\uDFE0 <b>EstateHub</b> — платформа недвижимости.\n\n' +
+        'Чтобы войти, нажмите «Войти через Telegram» в приложении или на сайте.'
       );
+
       res.json({ ok: true });
     } catch (e) {
       next(e);

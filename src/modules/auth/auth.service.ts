@@ -7,6 +7,7 @@ import { UserModel, IUser } from '../../models/User.js';
 import type { JwtPayload } from '../../middlewares/auth.middleware.js';
 import type { LoginBody, RegisterBody, SendCodeBody, ResetPasswordBody, AuthResponse } from './auth.types.js';
 import { sendCallVerification, sendTelegramCode } from '../../shared/sms.js';
+import { downloadProfilePhoto } from '../../shared/telegram.js';
 
 const SALT_ROUNDS = 10;
 const CODE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
@@ -225,30 +226,58 @@ export const authService = {
   },
 
   /** Called by the Telegram bot webhook when user sends /start <nonce> */
-  async telegramCallback(telegramId: string, firstName: string, lastName: string, nonce: string): Promise<void> {
+  async telegramCallback(
+    telegramId: string,
+    firstName: string,
+    lastName: string,
+    username: string | undefined,
+    nonce: string,
+  ): Promise<{ isNew: boolean } | null> {
     const entry = telegramNonceStore.get(nonce);
     if (!entry || entry.expiresAt <= Date.now()) {
       telegramNonceStore.delete(nonce);
-      return; // silently ignore expired nonces
+      return null;
     }
 
     // Find or create user by telegramId
+    let isNew = false;
     let user = await UserModel.findOne({ telegramId });
     if (!user) {
+      isNew = true;
       const name = [firstName, lastName].filter(Boolean).join(' ');
       const randomPass = crypto.randomBytes(16).toString('hex');
       const passwordHash = await bcrypt.hash(randomPass, SALT_ROUNDS);
+
+      // Download Telegram profile photo
+      const avatar = await downloadProfilePhoto(telegramId);
+
       user = await UserModel.create({
         telegramId,
+        telegramUsername: username,
         name,
         firstName,
         lastName,
         passwordHash,
         role: ROLES.USER,
+        ...(avatar ? { avatar } : {}),
       });
+    } else {
+      // Update existing user's Telegram data if changed
+      const updates: Record<string, unknown> = {};
+      if (username && user.telegramUsername !== username) updates.telegramUsername = username;
+      if (firstName && !user.firstName) updates.firstName = firstName;
+      if (lastName && !user.lastName) updates.lastName = lastName;
+      if (!user.name) updates.name = [firstName, lastName].filter(Boolean).join(' ');
+      if (!user.avatar) {
+        const avatar = await downloadProfilePhoto(telegramId);
+        if (avatar) updates.avatar = avatar;
+      }
+      if (Object.keys(updates).length > 0) {
+        user = await UserModel.findByIdAndUpdate(user._id, updates, { new: true }) ?? user;
+      }
     }
 
-    if (user.blocked) return;
+    if (user.blocked) return null;
 
     const token = createToken(user);
     entry.result = {
@@ -264,6 +293,18 @@ export const authService = {
         phoneHidden: user.phoneHidden,
       },
     };
+    return { isNew };
+  },
+
+  /** Save phone from Telegram contact share */
+  async telegramSavePhone(telegramId: string, phone: string): Promise<void> {
+    const cleanPhone = phone.startsWith('+') ? phone : `+${phone}`;
+    const existing = await UserModel.findOne({ phone: cleanPhone, telegramId: { $ne: telegramId } });
+    if (existing) return; // phone belongs to another account
+    await UserModel.findOneAndUpdate(
+      { telegramId },
+      { phone: cleanPhone, phoneVerified: true },
+    );
   },
 
   /** Poll for Telegram auth result */
