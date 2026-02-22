@@ -14,7 +14,7 @@ describe('Users API', () => {
 
       expect(res.body).toMatchObject({
         id: user.id,
-        email: user.email,
+        phone: user.phone,
         name: 'Profile User',
         role: 'user',
       });
@@ -48,7 +48,7 @@ describe('Users API', () => {
 
     it('should return list for admin', async () => {
       // Create a regular user first so the list is not empty
-      await registerUser(app, { email: 'regular@test.com' });
+      await registerUser(app, { phone: '+79991230021' });
 
       const admin = await registerAdmin(app);
 
@@ -60,7 +60,7 @@ describe('Users API', () => {
       expect(Array.isArray(res.body)).toBe(true);
       expect(res.body.length).toBeGreaterThanOrEqual(2); // admin + regular user
       expect(res.body[0]).toHaveProperty('id');
-      expect(res.body[0]).toHaveProperty('email');
+      expect(res.body[0]).toHaveProperty('phone');
       expect(res.body[0]).toHaveProperty('role');
     });
   });

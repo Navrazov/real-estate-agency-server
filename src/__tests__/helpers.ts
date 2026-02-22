@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { UserModel } from '../models/User.js';
+import { SubscriptionModel } from '../models/Subscription.js';
 
 const SALT_ROUNDS = 10;
 
@@ -11,33 +12,71 @@ let userCounter = 0;
 
 export async function registerUser(
   app: Express,
-  overrides: { email?: string; password?: string; name?: string } = {},
+  overrides: {
+    phone?: string;
+    password?: string;
+    name?: string;
+    firstName?: string;
+    lastName?: string;
+  } = {},
 ) {
   userCounter++;
-  const body = {
-    email: overrides.email ?? `user${userCounter}-${Date.now()}@test.com`,
-    password: overrides.password ?? 'Password123!',
-    name: overrides.name ?? `Test User ${userCounter}`,
+  const phone = overrides.phone ?? `+7999000${String(userCounter).padStart(4, '0')}`;
+  const firstName = overrides.firstName ?? 'Test';
+  const lastName = overrides.lastName ?? `User${userCounter}`;
+  const name = overrides.name ?? `${firstName} ${lastName}`;
+  const password = overrides.password ?? 'Password123!';
+  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+
+  const user = await UserModel.create({
+    phone,
+    passwordHash,
+    role: 'user',
+    name,
+    firstName,
+    lastName,
+    phoneVerified: true,
+  });
+
+  await SubscriptionModel.create({
+    userId: user._id.toString(),
+    plan: 'pro',
+    active: true,
+    startDate: new Date(),
+    endDate: null,
+  });
+
+  const token = jwt.sign(
+    { userId: user._id.toString(), role: user.role },
+    env.jwtSecret,
+    { expiresIn: env.jwtExpiresIn } as jwt.SignOptions,
+  );
+
+  return {
+    token,
+    user: {
+      id: user._id.toString(),
+      phone: user.phone,
+      name: user.name,
+      role: user.role,
+    },
+    password,
   };
-
-  const res = await request(app)
-    .post('/api/auth/register')
-    .send(body)
-    .expect(201);
-
-  return res.body as { token: string; user: { id: string; email: string; name?: string; role: string } };
 }
 
 export async function registerAdmin(app: Express) {
   userCounter++;
   const email = `admin${userCounter}-${Date.now()}@test.com`;
   const passwordHash = await bcrypt.hash('AdminPass123!', SALT_ROUNDS);
+  const phone = `+7988000${String(userCounter).padStart(4, '0')}`;
 
   const user = await UserModel.create({
     email,
+    phone,
     name: 'Admin User',
     passwordHash,
     role: 'admin',
+    phoneVerified: true,
   });
 
   const token = jwt.sign(
@@ -50,7 +89,7 @@ export async function registerAdmin(app: Express) {
     token,
     user: {
       id: user._id.toString(),
-      email: user.email,
+      phone: user.phone,
       name: user.name,
       role: user.role,
     },
@@ -68,6 +107,7 @@ export async function createListing(
     price: overrides.price ?? 100000,
     address: overrides.address ?? '123 Test Street',
     propertyType: overrides.propertyType ?? 'apartment',
+    images: overrides.images ?? ['https://example.com/test-image.jpg'],
     rooms: overrides.rooms ?? 3,
     area: overrides.area ?? 75,
     ...overrides,

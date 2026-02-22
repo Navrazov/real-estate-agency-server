@@ -13,7 +13,7 @@ describe('Listings API', () => {
         items: [],
         total: 0,
         page: 1,
-        totalPages: 0,
+        totalPages: 1,
       });
       expect(res.body).toHaveProperty('limit');
     });
@@ -44,6 +44,7 @@ describe('Listings API', () => {
           price: 150000,
           address: '789 Auth Avenue',
           propertyType: 'apartment',
+          images: ['https://example.com/image-1.jpg'],
           rooms: 2,
           area: 60,
         })
@@ -54,7 +55,7 @@ describe('Listings API', () => {
         price: 150000,
         address: '789 Auth Avenue',
         propertyType: 'apartment',
-        status: 'active',
+        status: 'pending',
       });
       expect(res.body).toHaveProperty('id');
     });
@@ -89,8 +90,8 @@ describe('Listings API', () => {
     });
 
     it('should return 404 for non-owner', async () => {
-      const owner = await registerUser(app, { email: 'owner@test.com' });
-      const other = await registerUser(app, { email: 'other@test.com' });
+      const owner = await registerUser(app, { phone: '+79991230011' });
+      const other = await registerUser(app, { phone: '+79991230012' });
       const listing = await createListing(app, owner.token);
 
       await request(app)
