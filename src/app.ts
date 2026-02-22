@@ -14,6 +14,7 @@ import { analyticsRoutes } from './modules/analytics/analytics.routes.js';
 import { sitemapRoutes } from './modules/sitemap/sitemap.routes.js';
 import { subscriptionRoutes } from './modules/subscriptions/subscription.routes.js';
 import { noteRoutes } from './modules/notes/note.routes.js';
+import { geocodingRoutes } from './modules/geocoding/geocoding.routes.js';
 import { errorMiddleware } from './middlewares/error.middleware.js';
 import { globalLimiter } from './middlewares/rate-limit.middleware.js';
 import { requestLogger } from './middlewares/request-logger.middleware.js';
@@ -41,6 +42,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/notes', noteRoutes);
+app.use('/api/geocode', geocodingRoutes);
 app.use(sitemapRoutes);
 
 app.use(errorMiddleware);

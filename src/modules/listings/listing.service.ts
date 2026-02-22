@@ -1,6 +1,7 @@
 import { ListingModel } from '../../models/Listing.js';
 import { UserModel } from '../../models/User.js';
 import { subscriptionService } from '../subscriptions/subscription.service.js';
+import { geocodingService } from '../geocoding/geocoding.service.js';
 import type { CreateListingBody, UpdateListingBody, ListingsQuery, ListingsResponse, ListingResponse } from './listing.types.js';
 import type { FilterQuery, SortOrder } from 'mongoose';
 import type { IListing } from '../../models/Listing.js';
@@ -197,6 +198,8 @@ export const listingService = {
       throw Object.assign(new Error(check.reason!), { statusCode: 403 });
     }
 
+    const resolvedCoords = await geocodingService.resolveListingCoordinates(body.address, body.lat, body.lng);
+
     const isAssignment = body.dealType === 'assignment';
     const listing = await ListingModel.create({
       title: body.title,
@@ -219,8 +222,8 @@ export const listingService = {
       authorName,
       authorPhone,
       images: body.images,
-      lat: body.lat,
-      lng: body.lng,
+      lat: resolvedCoords.lat,
+      lng: resolvedCoords.lng,
       status: 'pending',
       moderationStatus: 'pending',
       // Assignment fields
@@ -411,6 +414,13 @@ export const listingService = {
     if (body.images !== undefined) listing.images = body.images;
     if (body.lat !== undefined) listing.lat = body.lat;
     if (body.lng !== undefined) listing.lng = body.lng;
+    if (body.address !== undefined && body.lat === undefined && body.lng === undefined) {
+      const resolvedCoords = await geocodingService.resolveListingCoordinates(body.address);
+      if (resolvedCoords.lat != null && resolvedCoords.lng != null) {
+        listing.lat = resolvedCoords.lat;
+        listing.lng = resolvedCoords.lng;
+      }
+    }
     if (body.status !== undefined) listing.status = body.status;
     // Deal type & assignment fields
     if (body.dealType !== undefined) {

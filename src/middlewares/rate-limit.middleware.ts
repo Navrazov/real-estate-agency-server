@@ -19,3 +19,12 @@ export const authLimiter = rateLimit({
   message: { error: 'Too many authentication attempts, please try again later' },
   validate: { trustProxy: false },
 });
+
+export const geocodeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: isDev ? 1000 : 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many geocoding requests, please try again later' },
+  validate: { trustProxy: false },
+});

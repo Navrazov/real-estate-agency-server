@@ -22,4 +22,5 @@ export const env = {
   greensmsApiKey: process.env.GREENSMS_API_KEY || '',
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
   telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME || '',
+  yandexGeocoderApiKey: process.env.YANDEX_GEOCODER_API_KEY || '',
 } as const;
